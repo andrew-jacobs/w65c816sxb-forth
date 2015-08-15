@@ -13,15 +13,15 @@
 ; Status Register Bits
 ;------------------------------------------------------------------------------
 
-N_FLAG		equ		7
-V_FLAG		equ		6
-M_FLAG		equ		5
-X_FLAG		equ		4
-B_FLAG		equ		4
-D_FLAG		equ		3
-I_FLAG		equ		2
-Z_FLAG		equ		1
-C_FLAG		equ		0
+N_FLAG          equ     7
+V_FLAG          equ     6
+M_FLAG          equ     5
+X_FLAG          equ     4
+B_FLAG          equ     4
+D_FLAG          equ     3
+I_FLAG          equ     2
+Z_FLAG          equ     1
+C_FLAG          equ     0
 
 ;==============================================================================
 ; Macros
@@ -79,7 +79,7 @@ short_i         macro
                 endm
                 
 short_ai        macro
-                rep     #(1<<M_FLAG)|(1<<X_FLAG)
+                sep     #(1<<M_FLAG)|(1<<X_FLAG)
                 longa   off
                 longi   off
                 endm
