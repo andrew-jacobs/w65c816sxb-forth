@@ -65,8 +65,8 @@ WA              ds      2
 DSTACK          ds      DSTACK_SIZE
 
                 code
-                public  START
-START:
+                public  Start
+Start:
 
                 native
                 long_ai
@@ -457,20 +457,20 @@ EXIT:
 ; EMIT
 
                 HEADER  4,"EMIT",NORMAL,EXIT
-                extern  UART_TX
+                extern  UartTx
 EMIT:
                 lda     DSTACK+1,X
-                jsr     UART_TX
+                jsr     UartTx
                 inx
                 inx
                 jmp     NEXT
 
-; KEY 
+; KEY
 
                 HEADER  3,"KEY",NORMAL,EMIT
-                extern  UART_RX
+                extern  UartRx
 KEY:
-                jsr     UART_RX
+                jsr     UartTx
                 and     #$00ff
                 dex
                 dex

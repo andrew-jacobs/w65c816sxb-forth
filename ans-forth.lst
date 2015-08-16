@@ -1,4 +1,4 @@
-  Sun Aug  9 2015 18:27                                                                                                    Page 1
+  Sun Aug 16 2015 21:38                                                                                                    Page 1
 
 
                                                ***************************************
@@ -59,7 +59,7 @@
     10                        
     11                        
     12                        ;==============================================================================
-  Sun Aug  9 2015 18:27                                                                                                    Page 2
+  Sun Aug 16 2015 21:38                                                                                                    Page 2
 
 
     13                        ; Status Register Bits
@@ -120,7 +120,7 @@
     68                        
     69                        ; Sets the M bit making the accumator and memory accesses 16-bits wide.
     70                        
-  Sun Aug  9 2015 18:27                                                                                                    Page 3
+  Sun Aug 16 2015 21:38                                                                                                    Page 3
 
 
     71                        short_a         macro
@@ -134,7 +134,7 @@
     79                                        endm
     80                                        
     81                        short_ai        macro
-    82                                        rep     #(1<<M_FLAG)|(1<<X_FLAG)
+    82                                        sep     #(1<<M_FLAG)|(1<<X_FLAG)
     83                                        longa   off
     84                                        longi   off
     85                                        endm
@@ -165,8 +165,8 @@
     65 00:0002:              DSTACK          ds      DSTACK_SIZE
     66                        
     67                                        code
-    68                                        public  START
-    69                        START:
+    68                                        public  Start
+    69                        Start:
     70                        
     71                                        native
 +   71 00:0000: 18                           clc
@@ -181,7 +181,7 @@
     76                        
     77 00:000B: A0 xx xx                     ldy     #TEST
     78 00:000E: 4C xx xx                     jmp     NEXT
-  Sun Aug  9 2015 18:27                                                                                                    Page 4
+  Sun Aug 16 2015 21:38                                                                                                    Page 4
 
 
     79                        
@@ -242,7 +242,7 @@
    126                        TRUE:
    127 00:0048: CA                           dex                             ; Make space on the stack
    128 00:0049: CA                           dex
-  Sun Aug  9 2015 18:27                                                                                                    Page 5
+  Sun Aug 16 2015 21:38                                                                                                    Page 5
 
 
    129 00:004A: 74 03                        stz     DSTACK+1,x              ; And create a true value
@@ -303,7 +303,7 @@
    178 00:008A: xx xx                        dw      EXIT
    179                        
    180                        ; 2@ ( a-addr -- x1 x2 )
-  Sun Aug  9 2015 18:27                                                                                                    Page 6
+  Sun Aug 16 2015 21:38                                                                                                    Page 6
 
 
    181                        ;
@@ -364,7 +364,7 @@
    222 00:00CB: 29 FF 00                     and     #$00ff
    223 00:00CE: 95 03                        sta     DSTACK+1,x              ; And replace the top value
    224 00:00D0: 7A                           ply
-  Sun Aug  9 2015 18:27                                                                                                    Page 7
+  Sun Aug 16 2015 21:38                                                                                                    Page 7
 
 
    225 00:00D1: 4C xx xx                     jmp     NEXT                    ; Done
@@ -425,7 +425,7 @@
 +  269 00:0103: 03 44 55 50                  db      3,"DUP",NORMAL
        00:0107: 00 
    270                        DUP:
-  Sun Aug  9 2015 18:27                                                                                                    Page 8
+  Sun Aug 16 2015 21:38                                                                                                    Page 8
 
 
    271 00:0108: B5 03                        lda     DSTACK+1,x              ; Fetch top value
@@ -486,7 +486,7 @@
    316 00:014E: 95 03                        sta     DSTACK+1,X
    317 00:0150: 4C xx xx                     jmp     NEXT                    ; Done
    318                        
-  Sun Aug  9 2015 18:27                                                                                                    Page 9
+  Sun Aug 16 2015 21:38                                                                                                    Page 9
 
 
    319                        ;==============================================================================
@@ -547,7 +547,7 @@
    365 00:018B: A9 00 00                     lda     #0
    366 00:018E: F5 03                        sbc     DSTACK+1,x
    367 00:0190: 95 03                        sta     DSTACK+1,x
-  Sun Aug  9 2015 18:27                                                                                                    Page 10
+  Sun Aug 16 2015 21:38                                                                                                    Page 10
 
 
    368 00:0192: 4C xx xx                     jmp     NEXT                    ; Done
@@ -608,7 +608,7 @@
    415                                        HEADER  3,"XOR",NORMAL,OR
 +  415 00:01CC: xx xx                        dw      OR
 +  415 00:01CE: 03 58 4F 52                  db      3,"XOR",NORMAL
-  Sun Aug  9 2015 18:27                                                                                                    Page 11
+  Sun Aug 16 2015 21:38                                                                                                    Page 11
 
 
        00:01D2: 00 
@@ -664,26 +664,26 @@
 +  459 00:01FF: xx xx                        dw      EXIT
 +  459 00:0201: 04 45 4D 49                  db      4,"EMIT",NORMAL
        00:0205: 54 00 
-   460                                        extern  UART_TX
+   460                                        extern  UartTx
    461                        EMIT:
    462 00:0207: B5 03                        lda     DSTACK+1,X
-   463 00:0209: 20 xx xx                     jsr     UART_TX
+   463 00:0209: 20 xx xx                     jsr     UartTx
    464 00:020C: E8                           inx
-  Sun Aug  9 2015 18:27                                                                                                    Page 12
+  Sun Aug 16 2015 21:38                                                                                                    Page 12
 
 
    465 00:020D: E8                           inx
    466 00:020E: 4C xx xx                     jmp     NEXT
    467                        
-   468                        ; KEY 
+   468                        ; KEY
    469                        
    470                                        HEADER  3,"KEY",NORMAL,EMIT
 +  470 00:0211: xx xx                        dw      EMIT
 +  470 00:0213: 03 4B 45 59                  db      3,"KEY",NORMAL
        00:0217: 00 
-   471                                        extern  UART_RX
+   471                                        extern  UartRx
    472                        KEY:
-   473 00:0218: 20 xx xx                     jsr     UART_RX
+   473 00:0218: 20 xx xx                     jsr     UartTx
    474 00:021B: 29 FF 00                     and     #$00ff
    475 00:021E: CA                           dex
    476 00:021F: CA                           dex

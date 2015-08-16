@@ -1,4 +1,4 @@
-  Mon Aug 10 2015 16:32                                                                                                    Page 1
+  Sun Aug 16 2015 23:19                                                                                                    Page 1
 
 
                                                ***************************************
@@ -59,7 +59,7 @@
     15                        
     16             00000007   N_FLAG          equ     7
     17             00000006   V_FLAG          equ     6
-  Mon Aug 10 2015 16:32                                                                                                    Page 2
+  Sun Aug 16 2015 23:19                                                                                                    Page 2
 
 
     18             00000005   M_FLAG          equ     5
@@ -120,7 +120,7 @@
     73                                        longa   off
     74                                        endm
     75                        
-  Mon Aug 10 2015 16:32                                                                                                    Page 3
+  Sun Aug 16 2015 23:19                                                                                                    Page 3
 
 
     76                        short_i         macro
@@ -129,7 +129,7 @@
     79                                        endm
     80                                        
     81                        short_ai        macro
-    82                                        rep     #(1<<M_FLAG)|(1<<X_FLAG)
+    82                                        sep     #(1<<M_FLAG)|(1<<X_FLAG)
     83                                        longa   off
     84                                        longi   off
     85                                        endm
@@ -181,7 +181,7 @@
     45             00007FA0   PIA_PIA         equ     $7fa0
     46             00007FA0   PIA_DDRA        equ     $7fa0
     47             00007FA1   PIA_CRA         equ     $7fa1
-  Mon Aug 10 2015 16:32                                                                                                    Page 4
+  Sun Aug 16 2015 23:19                                                                                                    Page 4
 
 
     48             00007FA2   PIA_PIB         equ     $7fa2
@@ -242,7 +242,7 @@
     43                        
     44             00004B00   BAUD_RATE       equ     19200
     45                        
-  Mon Aug 10 2015 16:32                                                                                                    Page 5
+  Sun Aug 16 2015 23:19                                                                                                    Page 5
 
 
     46             00000020   RX_SIZE         equ     32
@@ -256,370 +256,333 @@
     54                                        messg   "TMR_COUNT does not fit in 16-bits"
     55                                        endif
     56                        
-    57             007A1200   TXD_COUNT_SP    equ     OSC_FREQ / (BAUD_RATE / 11)
-    58             000011E8   TXD_COUNT       equ     OSC_FREQ/(BAUD_RATE/11)
-    59                        
-    60                                        if      TXD_DELAY&$ffff0000
-    61                                        messg   "TXD_DELAY does not fit in 16-bits"
-    62                                        endif
-    63                        
-    64                        ;==============================================================================
-    65                        ; Data Areas
-    66                        ;------------------------------------------------------------------------------
-    67                        
-    68                                        data
-    69                                        org     $200
-    70                        
-    71 00:0200:              ML              ds      1
-    72 00:0201:              MH              ds      1
-    73 00:0202:              SC              ds      1
-    74 00:0203:              MN              ds      1
-    75 00:0204:              HR              ds      1
-    76                        
-    77                        ;------------------------------------------------------------------------------
-    78                        
-    79 00:0205:              TX_HEAD         ds      1
-    80 00:0206:              TX_TAIL         ds      1
-    81 00:0207:              RX_HEAD         ds      1
-    82 00:0208:              RX_TAIL         ds      1
-    83                        
-    84 00:0209:              TX_BUFF         ds      TX_SIZE
-    85 00:0229:              RX_BUFF         ds      RX_SIZE
-    86                        
-    87                        ;==============================================================================
-    88                        ;
-    89                        ;------------------------------------------------------------------------------
+    57             00001388   TXD_COUNT       equ     OSC_FREQ/(BAUD_RATE/12)
+    58                        
+    59                                        if      TXD_DELAY&$ffff0000
+    60                                        messg   "TXD_DELAY does not fit in 16-bits"
+    61                                        endif
+    62                        
+    63                        ;==============================================================================
+    64                        ; Data Areas
+    65                        ;------------------------------------------------------------------------------
+    66                        
+    67                                        data
+    68                                        org     $200
+    69                        
+    70 00:0200:              LOCKS           ds      1
+    71                        
+    72             00000080   TX_LOCK         equ     $80
+    73                        
+    74                        ;------------------------------------------------------------------------------
+    75                        
+    76 00:0201:              ML              ds      1
+    77 00:0202:              MH              ds      1
+    78 00:0203:              SC              ds      1
+    79 00:0204:              MN              ds      1
+    80 00:0205:              HR              ds      1
+    81                        
+    82                        ;==============================================================================
+    83                        ; Power On Reset
+    84                        ;------------------------------------------------------------------------------
+    85                        
+    86                                        code
+    87                                        extern  Start
+    88                        RESET:
+    89 00:0000: 9C 00 02                     stz     LOCKS                   ; Clear lock bits
     90                        
-    91                                        code
-    92                                        extern  START
-    93                        RESET:
-    94 00:0000: 9C 05 02                     stz     TX_HEAD                 ; Reset the TX and RX buffer
-    95 00:0003: 9C 06 02                     stz     TX_TAIL                 ; .. indexes
-    96 00:0006: 9C 07 02                     stz     RX_HEAD
-    97 00:0009: 9C 08 02                     stz     RX_TAIL
-    98                        
-    99 00:000C: A9 1F                        lda     #%00011111              ; 8 bits, 1 stop bit, 19200 baud
-   100 00:000E: 8D 83 7F                     sta     ACIA_CTL
-   101 00:0011: A9 09                        lda     #%00001001              ; No parity, no interrupt
-   102 00:0013: 8D 82 7F                     sta     ACIA_CMD
-   103 00:0016: AD 80 7F                     lda     ACIA_RXD                ; Clear receive buffer
-  Mon Aug 10 2015 16:32                                                                                                    Page 6
+    91 00:0003: A9 1F                        lda     #%00011111              ; 8 bits, 1 stop bit, 19200 baud
+    92 00:0005: 8D 83 7F                     sta     ACIA_CTL
+    93 00:0008: A9 09                        lda     #%00001001              ; No parity, no interrupt
+    94 00:000A: 8D 82 7F                     sta     ACIA_CMD
+    95 00:000D: AD 80 7F                     lda     ACIA_RXD                ; Clear receive buffer
+    96                        
+    97 00:0010: AD CE 7F                     lda     VIA1_IER                ; Disable active interrupts
+    98 00:0013: 8D CE 7F                     sta     VIA1_IER
+    99 00:0016: A9 40                        lda     #%01000000              ; Configure VIA Timers
+   100 00:0018: 8D CB 7F                     sta     VIA1_ACR
+   101 00:001B: A9 40                        lda     #<TMR_COUNT             ; Set timer latches
+   102 00:001D: 8D C4 7F                     sta     VIA1_T1CL
+   103 00:0020: A9 1F                        lda     #>TMR_COUNT
+  Sun Aug 16 2015 23:19                                                                                                    Page 6
 
 
-   104 00:0019: AD 80 7F                     lda     ACIA_RXD
-   105                        
-   106 00:001C: A9 7F        		lda	#%01111111		; Disable all interrupts
-   107 00:001E: 8D CE 7F     		sta	VIA1_IER
-   108 00:0021: A9 40                        lda     #%01000000              ; Configure VIA Timers
-   109 00:0023: 8D CB 7F                     sta     VIA1_ACR
-   110 00:0026: A9 40                        lda     #<TMR_COUNT             ; Set timer latches
-   111 00:0028: 8D C6 7F                     sta     VIA1_T1LL
-   112 00:002B: A9 1F                        lda     #>TMR_COUNT
-   113 00:002D: 8D C7 7F                     sta     VIA1_T1LH
-   114 00:0030: A9 C0                        lda     #%11000000              ; Enable Timer1 interrupt
-   115 00:0032: 8D CE 7F                     sta     VIA1_IER
-   116 00:0035: 58                           cli
+   104 00:0022: 8D C5 7F                     sta     VIA1_T1CH
+   105 00:0025: A9 C0                        lda     #%11000000              ; Enable Timer1 interrupt
+   106 00:0027: 8D CE 7F                     sta     VIA1_IER
+   107                        
+   108 00:002A: AD EE 7F                     lda     VIA2_IER                ; Disable active interrupts
+   109 00:002D: 8D EE 7F                     sta     VIA2_IER
+   110 00:0030: 58                           cli
+   111                                        native
++  111 00:0031: 18                           clc
++  111 00:0032: FB                           xce
+   112                        
+   113                        loop:
+   114 00:0033: 20 xx xx                     jsr     UartRx
+   115 00:0036: 20 xx xx                     jsr     UartTx
+   116 00:0039: 80 F8                        bra     loop
    117                        
-   118                        loop:
-   119 00:0036: 20 xx xx                     jsr     UART_RX
-   120 00:0039: 20 xx xx                     jsr     UART_TX
-   121 00:003C: 80 F8                        bra     loop
-   122                        
-   123 00:003E: 4C xx xx                     jmp     START                   ; Jump to the application start
-   124                        
-   125                        ;==============================================================================
-   126                        ; Interrupt Handlers
-   127                        ;------------------------------------------------------------------------------
-   128                        
-   129                        ; Handle IRQ and BRK interrupts in emulation mode.
-   130                        ; -- Currently this code assumes only IRQs will occur
-   131                        
-   132                        IRQBRK:
-   133 00:0041: 48                           pha                             ; Save callers registers
-   134 00:0042: DA                           phx
-   135 00:0043: 20 xx xx                     jsr     SERVICE                 ; Service the hardware
-   136 00:0046: FA                           plx                             ; Restore registers
-   137 00:0047: 68                           pla
-   138 00:0048: 40                           rti                             ; Done
+   118 00:003B: 4C xx xx                     jmp     Start                   ; Jump to the application start
+   119                        
+   120                        ;==============================================================================
+   121                        ; Interrupt Handlers
+   122                        ;------------------------------------------------------------------------------
+   123                        
+   124                        ; Handle IRQ and BRK interrupts in emulation mode.
+   125                        ; -- Currently this code assumes only IRQs will occur
+   126                        
+   127                        IRQBRK:
+   128 00:003E: 48                           pha                             ; Save callers registers
+   129 00:003F: DA                           phx
+   130 00:0040: 20 xx xx                     jsr     Service                 ; Service the hardware
+   131 00:0043: FA                           plx                             ; Restore registers
+   132 00:0044: 68                           pla
+   133 00:0045: 40                           rti                             ; Done
+   134                        
+   135                        ; Handle NMI interrupts in emulation mode.
+   136                        
+   137                        NMIRQ:
+   138 00:0046: 40                           rti
    139                        
-   140                        ; Handle NMI interrupts in emulation mode.
+   140                        ;------------------------------------------------------------------------------
    141                        
-   142                        NMIRQ:
-   143 00:0049: 40                           rti
-   144                        
-   145                        ;------------------------------------------------------------------------------
-   146                        
-   147                        ; Handle IRQ interrupts in native mode.
-   148                        
-   149                        IRQ:
-   150 00:004A: 48                           pha                             ; Save callers registers
-   151 00:004B: DA                           phx
-   152 00:004C: 08                           php
-   153                                        short_ai                        ; Make registers 8-bit
-+  153 00:004D: C2 30                        rep     #(1<<M_FLAG)|(1<<X_FLAG)
-+  153                                        longa   off
-+  153                                        longi   off
-   154 00:004F: 20 xx xx                     jsr     SERVICE                 ; Service the hardware
-   155 00:0052: 28                           plp                             ; Restore register widths
-   156 00:0053: FA                           plx                             ; .. and values
-   157 00:0054: 68                           pla
-   158 00:0055: 40                           rti                             ; Done
-  Mon Aug 10 2015 16:32                                                                                                    Page 7
+   142                        ; Handle IRQ interrupts in native mode.
+   143                        
+   144                        IRQ:
+   145 00:0047: 48                           pha                             ; Save callers registers
+   146 00:0048: DA                           phx
+   147 00:0049: 08                           php
+   148                                        short_ai                        ; Make registers 8-bit
++  148 00:004A: E2 30                        sep     #(1<<M_FLAG)|(1<<X_FLAG)
++  148                                        longa   off
++  148                                        longi   off
+   149 00:004C: 20 xx xx                     jsr     Service                 ; Service the hardware
+   150 00:004F: 28                           plp                             ; Restore register widths
+   151 00:0050: FA                           plx                             ; .. and values
+   152 00:0051: 68                           pla
+   153 00:0052: 40                           rti                             ; Done
+   154                        
+   155                        ; Handle IRQ interrupts in native mode.
+   156                        
+  Sun Aug 16 2015 23:19                                                                                                    Page 7
 
 
+   157                        BRK:
+   158 00:0053: 40                           rti
    159                        
    160                        ; Handle IRQ interrupts in native mode.
    161                        
-   162                        BRK:
-   163 00:0056: 40                           rti
+   162                        NMI:
+   163 00:0054: 40                           rti
    164                        
-   165                        ; Handle IRQ interrupts in native mode.
+   165                        ;------------------------------------------------------------------------------
    166                        
-   167                        NMI:
-   168 00:0057: 40                           rti
-   169                        
-   170                        ;------------------------------------------------------------------------------
+   167                        ; COP and ABORT interrupts are not handled.
+   168                        
+   169                        COP:
+   170 00:0055: 80 FE                        bra     $                       ; Loop forever
    171                        
-   172                        ; COP and ABORT interrupts are not handled.
-   173                        
-   174                        COP:
-   175 00:0058: 80 FE                        bra     $                       ; Loop forever
-   176                        
-   177                        ABORT:
-   178 00:005A: 80 FE                        bra     $                       ; Loop forever
-   179                        
-   180                        ;==============================================================================
-   181                        ; Interrup Servicing
-   182                        ;------------------------------------------------------------------------------
-   183                        
-   184                        SERVICE:
-   185 00:005C: AD 81 7F                     lda     ACIA_SR                 ; Is the ACIA the source?
-   186 00:005F: 10 14                        bpl     ACIA_HANDLED            ; No, try next device
-   187 00:0061: AD 80 7F                     lda     ACIA_RXD
-   188 00:0064: AE 08 02                     ldx     RX_TAIL                 ; Save the new character
-   189 00:0067: 9D 29 02                     sta     RX_BUFF,x
-   190 00:006A: 20 xx xx                     jsr     BUMP_RX                 ; Bump tail index
-   191 00:006D: EC 07 02                     cpx     RX_HEAD                 ; Is the receive buffer full?
-   192 00:0070: F0 03                        beq     ACIA_HANDLED            ; Yes, drop the character
-   193 00:0072: 8E 08 02                     stx     RX_TAIL                 ; No, update the tail
-   194                        ACIA_HANDLED:
-   195                        
-   196                        ;------------------------------------------------------------------------------
-   197                        
-   198                        PIA_HANDLED:
-   199                        
-   200                        ;------------------------------------------------------------------------------
-   201                        
-   202 00:0075: AD CD 7F                     lda     VIA1_IFR                ; Is VIA1 the source?
-   203 00:0078: 30 03        		bmi	$+5
-   204 00:007A: 4C xx xx                     jmp     VIA1_HANDLED            ; No.
-   205                        
-   206 00:007D: 29 40                        and     #%01000000              ; Is Timer1 the source?
-   207 00:007F: F0 4A                        beq     VIA1_T1_HANDLED         ; No
-   208 00:0081: 8D CD 7F                     sta     VIA1_IFR                ; Clear the interrupt
-   209 00:0084: F8                           sed
-   210 00:0085: 38                           sec
-   211 00:0086: AD 00 02                     lda     ML                      ; Bump lo milliseconds
-   212 00:0089: 69 00                        adc     #0
-   213 00:008B: 8D 00 02                     sta     ML
-   214 00:008E: 90 3A                        bcc     TIMER_UPDATED
-   215 00:0090: AD 01 02                     lda     MH                      ; Bump hi milliseconds
-   216 00:0093: 69 00                        adc     #0
-  Mon Aug 10 2015 16:32                                                                                                    Page 8
+   172                        ABORT:
+   173 00:0057: 80 FE                        bra     $                       ; Loop forever
+   174                        
+   175                        ;==============================================================================
+   176                        ; Interrupt Servicing
+   177                        ;------------------------------------------------------------------------------
+   178                        
+   179                        Service:
+   180 00:0059: AD 81 7F     		lda	ACIA_SR
+   181 00:005C: 8D F0 00     		sta	$f0
+   182 00:005F: AD CD 7F     		lda	VIA1_IFR
+   183 00:0062: 8D F1 00     		sta	$f1
+   184 00:0065: AD CE 7F     		lda	VIA1_IER
+   185 00:0068: 8D F2 00     		sta	$f2
+   186 00:006B: AD ED 7F     		lda	VIA2_IFR
+   187 00:006E: 8D F3 00     		sta	$f3
+   188 00:0071: AD EE 7F     		lda	VIA2_IER
+   189 00:0074: 8D F4 00     		sta	$f4
+   190                        
+   191 00:0077: AD CD 7F                     lda     VIA1_IFR                ; Is VIA1 the source?
+   192 00:007A: 30 03                        bmi     $+5
+   193 00:007C: 4C xx xx                     jmp     VIA1Handled             ; No.
+   194                        		
+   195 00:007F: EE F6 00     		inc	$f6
+   196                        
+   197 00:0082: 29 40                        and     #%01000000              ; Is Timer1 the source?
+   198 00:0084: F0 4D                        beq     VIA1T1Handled           ; No
+   199 00:0086: AD C4 7F                     lda	VIA1_T1CL               ; Clear the interrupt
+   200                        
+   201 00:0089: EE F7 00     		inc	$f7
+   202                        		
+   203 00:008C: F8                           sed
+   204 00:008D: 38                           sec
+   205 00:008E: AD 01 02                     lda     ML                      ; Bump lo milliseconds
+   206 00:0091: 69 00                        adc     #0
+   207 00:0093: 8D 01 02                     sta     ML
+   208 00:0096: 90 3A                        bcc     TimeUpdated
+   209 00:0098: AD 02 02                     lda     MH                      ; Bump hi milliseconds
+   210 00:009B: 69 00                        adc     #0
+   211 00:009D: 8D 02 02                     sta     MH
+   212 00:00A0: 90 30                        bcc     TimeUpdated
+   213 00:00A2: AD 03 02                     lda     SC                      ; Bump seconds
+   214 00:00A5: 69 00                        adc     #0
+  Sun Aug 16 2015 23:19                                                                                                    Page 8
 
 
-   217 00:0095: 8D 01 02                     sta     MH
-   218 00:0098: 90 30                        bcc     TIMER_UPDATED
-   219 00:009A: AD 02 02                     lda     SC                      ; Bump seconds
-   220 00:009D: 69 00                        adc     #0
-   221 00:009F: C9 60                        cmp     #$60
-   222 00:00A1: D0 02                        bne     $+4
-   223 00:00A3: A9 00                        lda     #0
-   224 00:00A5: 8D 02 02                     sta     SC
-   225 00:00A8: 90 20                        bcc     TIMER_UPDATED
-   226 00:00AA: AD 03 02                     lda     MN                      ; Bump minutes
-   227 00:00AD: 69 00                        adc     #0
-   228 00:00AF: C9 60                        cmp     #$60
-   229 00:00B1: D0 02                        bne     $+4
-   230 00:00B3: A9 00                        lda     #0
-   231 00:00B5: 8D 03 02                     sta     MN
-   232 00:00B8: 90 10                        bcc     TIMER_UPDATED
-   233 00:00BA: AD 04 02                     lda     HR                      ; Bump hours
-   234 00:00BD: 69 00                        adc     #0
-   235 00:00BF: C9 60                        cmp     #$60
-   236 00:00C1: D0 02                        bne     $+4
-   237 00:00C3: A9 00                        lda     #0
-   238 00:00C5: 8D 04 02                     sta     HR
-   239 00:00C8: 90 00                        bcc     TIMER_UPDATED
-   240                                        ; TODO: Bump the rest of the time
-   241                        TIMER_UPDATED:
-   242 00:00CA: D8                           cld
-   243                        VIA1_T1_HANDLED:
-   244                        
-   245 00:00CB: AD CD 7F                     lda     VIA1_IFR                ; Is Timer2 the source
-   246 00:00CE: 29 20                        and     #%00100000
-   247 00:00D0: F0 28                        beq     VIA1_T2_HANDLED         ; No.
-   248 00:00D2: 8D CD 7F                     sta     VIA1_IFR                ; Clear the interrupt
-   249 00:00D5: AE 05 02                     ldx     TX_HEAD                 ; Get the head index
-   250 00:00D8: EC 06 02                     cpx     TX_TAIL                 ; Is the transmit buffer empty?
-   251 00:00DB: F0 18                        beq     TX_EMPTY
-   252 00:00DD: BD 09 02                     lda     TX_BUFF,x               ; Fetch next character
-   253 00:00E0: 8D 80 7F                     sta     ACIA_TXD                ; .. and transmit
-   254 00:00E3: 20 xx xx                     jsr     BUMP_TX                 ; Update the head index
-   255 00:00E6: 8E 05 02                     stx     TX_HEAD
-   256 00:00E9: A9 E8                        lda     #<TXD_COUNT
-   257 00:00EB: 8D C8 7F                     sta     VIA1_T2CL
-   258 00:00EE: A9 11                        lda     #>TXD_COUNT
-   259 00:00F0: 8D C9 7F                     sta     VIA1_T2CH
-   260 00:00F3: 80 05                        bra     VIA1_T2_HANDLED         ; Done
-   261                        
-   262                        TX_EMPTY:
-   263 00:00F5: A9 20                        lda     #%00100000              ; Disable Timer2
-   264 00:00F7: 8D CE 7F                     sta     VIA1_IER
-   265                        VIA1_T2_HANDLED:
-   266                        VIA1_HANDLED:
+   215 00:00A7: C9 60                        cmp     #$60
+   216 00:00A9: D0 02                        bne     $+4
+   217 00:00AB: A9 00                        lda     #0
+   218 00:00AD: 8D 03 02                     sta     SC
+   219 00:00B0: 90 20                        bcc     TimeUpdated
+   220 00:00B2: AD 04 02                     lda     MN                      ; Bump minutes
+   221 00:00B5: 69 00                        adc     #0
+   222 00:00B7: C9 60                        cmp     #$60
+   223 00:00B9: D0 02                        bne     $+4
+   224 00:00BB: A9 00                        lda     #0
+   225 00:00BD: 8D 04 02                     sta     MN
+   226 00:00C0: 90 10                        bcc     TimeUpdated
+   227 00:00C2: AD 05 02                     lda     HR                      ; Bump hours
+   228 00:00C5: 69 00                        adc     #0
+   229 00:00C7: C9 60                        cmp     #$60
+   230 00:00C9: D0 02                        bne     $+4
+   231 00:00CB: A9 00                        lda     #0
+   232 00:00CD: 8D 05 02                     sta     HR
+   233 00:00D0: 90 00                        bcc     TimeUpdated
+   234                                        ; TODO: Bump the rest of the time
+   235                        TimeUpdated:
+   236 00:00D2: D8                           cld
+   237                        VIA1T1Handled:
+   238                        
+   239 00:00D3: AD CD 7F                     lda     VIA1_IFR                ; Is Timer2 the source
+   240 00:00D6: 29 20                        and     #%00100000
+   241 00:00D8: F0 08                        beq     VIA1T2Handled           ; No.
+   242 00:00DA: AD C8 7F                     lda	VIA1_T2CL               ; Clear the interrupt
+   243                        
+   244 00:00DD: A9 80                        lda     #TX_LOCK                ; Lock TX hardware
+   245 00:00DF: 1C 00 02                     trb     LOCKS
+   246                        VIA1T2Handled:
+   247                        VIA1Handled:
+   248                        
+   249                        ;------------------------------------------------------------------------------
+   250                        
+   251                        VIA2Handled:
+   252 00:00E2: 60                           rts                             ; Done
+   253                        
+   254                        ;------------------------------------------------------------------------------
+   255                        
+   256 00:00E3: 00 31 28 31  NORM_DAYS:      db      $00,$31,$28,$31,$30,$31,$30,$31
+       00:00E7: 30 31 30 31 
+   257 00:00EB: 31 30 00 00                  db      $31,$30,$00,$00,$00,$00,$00,$00
+       00:00EF: 00 00 00 00 
+   258 00:00F3: 31 30 31                     db      $31,$30,$31
+   259                        
+   260 00:00F6: 00 31 29 31  LEAP_DAYS:      db      $00,$31,$29,$31,$30,$31,$30,$31
+       00:00FA: 30 31 30 31 
+   261 00:00FE: 31 30 00 00                  db      $31,$30,$00,$00,$00,$00,$00,$00
+       00:0102: 00 00 00 00 
+   262 00:0106: 31 30 31                     db      $31,$30,$31
+   263                        
+   264                        ;==============================================================================
+   265                        ; Buffered UART Interface
+   266                        ;------------------------------------------------------------------------------
    267                        
-   268                        ;------------------------------------------------------------------------------
-   269                        
-   270                        VIA2_HANDLED:
-   271 00:00FA: 60                           rts                             ; Done
-   272                        
-   273                        ;==============================================================================
-   274                        ; Buffered UART Interface
-  Mon Aug 10 2015 16:32                                                                                                    Page 9
+   268                        ; Adds the characater in A to the transmit buffer and change the ACIA settings
+  Sun Aug 16 2015 23:19                                                                                                    Page 9
 
 
-   275                        ;------------------------------------------------------------------------------
-   276                        
-   277                        ; Adds the characater in A to the transmit buffer and change the ACIA settings
-   278                        ; to enable a transmit interrupt when its is ready to send.
-   279                        
-   280                                        public  UART_TX
-   281                        UART_TX:
-   282 00:00FB: 48                           pha                             ; Save callers registers
-   283 00:00FC: DA                           phx
-   284 00:00FD: 08                           php                             ; Save current MX settings
-   285                                        short_ai                        ; .. and ensure 8-bits
-+  285 00:00FE: C2 30                        rep     #(1<<M_FLAG)|(1<<X_FLAG)
-+  285                                        longa   off
-+  285                                        longi   off
-   286 00:0100: AE 06 02                     ldx     TX_TAIL                 ; Save the character
-   287 00:0103: 9D 09 02                     sta     TX_BUFF,x
-   288 00:0106: 20 xx xx                     jsr     BUMP_TX                 ; Bump the tail index
-   289 00:0109: EC 05 02     TX_WAIT:        cpx     TX_HEAD                 ; Wait until save to update
-   290 00:010C: F0 FB                        beq     TX_WAIT                 ; .. the tail index
-   291 00:010E: 8E 06 02                     stx     TX_TAIL
-   292 00:0111: 78                           sei
-   293 00:0112: AD CE 7F                     lda     VIA1_IER                ; Is timer2 is active
-   294 00:0115: 29 20                        and     #%00100000
-   295 00:0117: D0 0F                        bne     TX_SKIP                 ; Yes
-   296 00:0119: A9 E8                        lda     #<TXD_COUNT             ; No, reload counter
-   297 00:011B: 8D C8 7F                     sta     VIA1_T2CL
-   298 00:011E: A9 11                        lda     #>TXD_COUNT
-   299 00:0120: 8D C9 7F                     sta     VIA1_T2CH
-   300 00:0123: A9 A0                        lda     #%10100000              ; Allow the interrupt
-   301 00:0125: 8D CE 7F                     sta     VIA1_IER
-   302 00:0128: 58           TX_SKIP:        cli
-   303 00:0129: 28                           plp                             ; Restore flags
-   304 00:012A: FA                           plx                             ; .. and registers
-   305 00:012B: 68                           pla
-   306 00:012C: 60                           rts                             ; Done
+   269                        ; to enable a transmit interrupt when its is ready to send.
+   270                        
+   271                                        public  UartTx
+   272                        UartTx:
+   273 00:0109: 48                           pha                             ; Save callers A
+   274 00:010A: 08                           php                             ; .. and MX bits
+   275                                        short_a                         ; Ensure 8-bits
++  275 00:010B: E2 20                        sep     #(1<<M_FLAG)
++  275                                        longa   off
+   276 00:010D: 48                           pha
+   277 00:010E: A9 80                        lda     #TX_LOCK                ; Wait if TX operation
+   278 00:0110: 2C 00 02     TxWait:         bit     LOCKS                   ; .. is still on going
+   279 00:0113: D0 FB                        bne     TxWait
+   280 00:0115: 0C 00 02                     tsb     LOCKS                   ; Mark TX as in use
+   281 00:0118: 68                           pla
+   282 00:0119: 8D 80 7F                     sta     ACIA_TXD                ; Transmit the character
+   283 00:011C: A9 88                        lda     #<TXD_COUNT             ; Load transmission oounter
+   284 00:011E: 8D C8 7F                     sta     VIA1_T2CL
+   285 00:0121: A9 13                        lda     #>TXD_COUNT
+   286 00:0123: 8D C9 7F                     sta     VIA1_T2CH
+   287 00:0126: A9 A0                        lda     #%10100000              ; And allow the interrupt
+   288 00:0128: 8D CE 7F                     sta     VIA1_IER
+   289 00:012B: 28                           plp                             ; Restore flags and A
+   290 00:012C: 68                           pla
+   291 00:012D: 60                           rts                             ; Done
+   292                        
+   293                        ; Fetch the next character from the RX buffer waiting for some to arrive if the
+   294                        ; buffer is empty.
+   295                        
+   296                                        public  UartRx
+   297                        UartRx:
+   298 00:012E: 08                           php                             ; Save current MX settings
+   299                                        short_a                         ; .. and ensure 8-bits
++  299 00:012F: E2 20                        sep     #(1<<M_FLAG)
++  299                                        longa   off
+   300                        RxWait:
+   301 00:0131: AD 81 7F                     lda     ACIA_SR
+   302 00:0134: 29 08                        and     #$08
+   303 00:0136: F0 F9                        beq     RxWait
+   304 00:0138: AD 80 7F                     lda     ACIA_RXD
+   305 00:013B: 28                           plp
+   306 00:013C: 60                           rts
    307                        
-   308                        ; Increment the transmit buffer index in X and wrap it back to zero if it
-   309                        ; goes past the end.
-   310                        
-   311                        BUMP_TX:
-   312 00:012D: E8                           inx                             ; Bump the TX index
-   313 00:012E: E0 20                        cpx     #TX_SIZE                ; Reached the limit?
-   314 00:0130: D0 02                        bne     $+4                     ; No
-   315 00:0132: A2 00                        ldx     #0                      ; Yes, wrap around
-   316 00:0134: 60                           rts                             ; Done
-   317                        
-   318                        ; Fetch the next character from the RX buffer waiting for some to arrive if the
-   319                        ; buffer is empty.
-   320                        
-   321                                        public  UART_RX
-   322                        UART_RX:
-   323 00:0135: DA                           phx                             ; Save callers X
-   324 00:0136: 08                           php                             ; Save current MX settings
-   325                                        short_ai                        ; .. and ensure 8-bits
-+  325 00:0137: C2 30                        rep     #(1<<M_FLAG)|(1<<X_FLAG)
-+  325                                        longa   off
-+  325                                        longi   off
-   326 00:0139: AE 07 02                     ldx     RX_HEAD                 ; Load head index
-  Mon Aug 10 2015 16:32                                                                                                    Page 10
+   308                        ;==============================================================================
+   309                        ; Reset Vectors
+   310                        ;------------------------------------------------------------------------------
+   311                        
+   312                        ShadowVectors   section offset $7ee0
+   313                        
+   314 00:7EE0:                              ds      4               ; Reserved
+   315 00:7EE4: xx xx                        dw      COP             ; $FFE4 - COP(816)
+   316 00:7EE6: xx xx                        dw      BRK             ; $FFE6 - BRK(816)
+   317 00:7EE8: xx xx                        dw      ABORT           ; $FFE8 - ABORT(816)
+   318 00:7EEA: xx xx                        dw      NMI             ; $FFEA - NMI(816)
+   319 00:7EEC:                              ds      2               ; Reserved
+   320 00:7EEE: xx xx                        dw      IRQ             ; $FFEE - IRQ(816)
+   321                        
+   322 00:7EF0:                              ds      4
+  Sun Aug 16 2015 23:19                                                                                                    Page 10
 
 
-   327 00:013C: EC 08 02     RX_WAIT:        cpx     RX_TAIL                 ; Any data in the buffer?
-   328 00:013F: F0 FB                        beq     RX_WAIT                 ; No, wait for some
-   329 00:0141: BD 29 02                     lda     RX_BUFF,x               ; Yes, fetch it
-   330 00:0144: 20 xx xx                     jsr     BUMP_RX                 ; Update head index
-   331 00:0147: 8E 07 02                     stx     RX_HEAD
-   332 00:014A: 28                           plp                             ; Restore flags
-   333 00:014B: FA                           plx                             ; .. and X
-   334 00:014C: 60                           rts                             ; Done
+   323 00:7EF4: xx xx                        dw      COP             ; $FFF4 - COP(C02)
+   324 00:7EF6:                              ds      2               ; $Reserved
+   325 00:7EF8: xx xx                        dw      ABORT           ; $FFF8 - ABORT(C02)
+   326 00:7EFA: xx xx                        dw      NMIRQ           ; $FFFA - NMI(C02)
+   327 00:7EFC: xx xx                        dw      RESET           ; $FFFC - RESET(C02)
+   328 00:7EFE: xx xx                        dw      IRQBRK          ; $FFFE - IRQBRK(C02)
+   329                        
+   330 00:7F00:                              ends
+   331                        
+   332                        ;------------------------------------------------------------------------------
+   333                        
+   334                        Vectors         section offset $ffe0
    335                        
-   336                        ; Increment the recieve buffer index in X and wrap it back to zero if it
-   337                        ; goes past the end.
-   338                        
-   339                        BUMP_RX:
-   340 00:014D: E8                           inx                             ; Bump the RX index
-   341 00:014E: E0 20                        cpx     #RX_SIZE                ; Reached the limit?
-   342 00:0150: D0 02                        bne     $+4                     ; No
-   343 00:0152: A2 00                        ldx     #0                      ; Yes, wrap around
-   344 00:0154: 60                           rts                             ; Done
-   345                        
-   346                        ;==============================================================================
-   347                        ; Reset Vectors
-   348                        ;------------------------------------------------------------------------------
-   349                        
-   350                        ShadowVectors   section offset $7ee0
+   336 00:FFE0:                              ds      4               ; Reserved
+   337 00:FFE4: xx xx                        dw      COP             ; $FFE4 - COP(816)
+   338 00:FFE6: xx xx                        dw      BRK             ; $FFE6 - BRK(816)
+   339 00:FFE8: xx xx                        dw      ABORT           ; $FFE8 - ABORT(816)
+   340 00:FFEA: xx xx                        dw      NMI             ; $FFEA - NMI(816)
+   341 00:FFEC:                              ds      2               ; Reserved
+   342 00:FFEE: xx xx                        dw      IRQ             ; $FFEE - IRQ(816)
+   343                        
+   344 00:FFF0:                              ds      4
+   345 00:FFF4: xx xx                        dw      COP             ; $FFF4 - COP(C02)
+   346 00:FFF6:                              ds      2               ; $Reserved
+   347 00:FFF8: xx xx                        dw      ABORT           ; $FFF8 - ABORT(C02)
+   348 00:FFFA: xx xx                        dw      NMIRQ           ; $FFFA - NMI(C02)
+   349 00:FFFC: xx xx                        dw      RESET           ; $FFFC - RESET(C02)
+   350 00:FFFE: xx xx                        dw      IRQBRK          ; $FFFE - IRQBRK(C02)
    351                        
-   352 00:7EE0:                              ds      4               ; Reserved
-   353 00:7EE4: xx xx                        dw      COP             ; $FFE4 - COP(816)
-   354 00:7EE6: xx xx                        dw      BRK             ; $FFE6 - BRK(816)
-   355 00:7EE8: xx xx                        dw      ABORT           ; $FFE8 - ABORT(816)
-   356 00:7EEA: xx xx                        dw      NMI             ; $FFEA - NMI(816)
-   357 00:7EEC:                              ds      2               ; Reserved
-   358 00:7EEE: xx xx                        dw      IRQ             ; $FFEE - IRQ(816)
-   359                        
-   360 00:7EF0:                              ds      4
-   361 00:7EF4: xx xx                        dw      COP             ; $FFF4 - COP(C02)
-   362 00:7EF6:                              ds      2               ; $Reserved
-   363 00:7EF8: xx xx                        dw      ABORT           ; $FFF8 - ABORT(C02)
-   364 00:7EFA: xx xx                        dw      NMIRQ           ; $FFFA - NMI(C02)
-   365 00:7EFC: xx xx                        dw      RESET           ; $FFFC - RESET(C02)
-   366 00:7EFE: xx xx                        dw      IRQBRK          ; $FFFE - IRQBRK(C02)
-   367                        
-   368 00:7F00:                              ends
-   369                        
-   370                        ;------------------------------------------------------------------------------
-   371                        
-   372                        Vectors         section offset $ffe0
-   373                        
-   374 00:FFE0:                              ds      4               ; Reserved
-   375 00:FFE4: xx xx                        dw      COP             ; $FFE4 - COP(816)
-   376 00:FFE6: xx xx                        dw      BRK             ; $FFE6 - BRK(816)
-   377 00:FFE8: xx xx                        dw      ABORT           ; $FFE8 - ABORT(816)
-   378 00:FFEA: xx xx                        dw      NMI             ; $FFEA - NMI(816)
-   379 00:FFEC:                              ds      2               ; Reserved
-   380 00:FFEE: xx xx                        dw      IRQ             ; $FFEE - IRQ(816)
-   381                        
-   382 00:FFF0:                              ds      4
-   383 00:FFF4: xx xx                        dw      COP             ; $FFF4 - COP(C02)
-   384 00:FFF6:                              ds      2               ; $Reserved
-  Mon Aug 10 2015 16:32                                                                                                    Page 11
+   352 01:0000:                              ends
+   353                        
+   354                                        end
 
 
-   385 00:FFF8: xx xx                        dw      ABORT           ; $FFF8 - ABORT(C02)
-   386 00:FFFA: xx xx                        dw      NMIRQ           ; $FFFA - NMI(C02)
-   387 00:FFFC: xx xx                        dw      RESET           ; $FFFC - RESET(C02)
-   388 00:FFFE: xx xx                        dw      IRQBRK          ; $FFFE - IRQBRK(C02)
-   389                        
-   390 01:0000:                              ends
-   391                        
-   392                                        end
-
-
-      Lines assembled: 582
+      Lines assembled: 544
       Errors: 0
