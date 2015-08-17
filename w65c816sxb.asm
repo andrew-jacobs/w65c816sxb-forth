@@ -19,9 +19,17 @@
 ;==============================================================================
 ; Notes:
 ;
-; ACIA interrupts are used to handle recieved serial data but the silicon bug
-; prevents them from being used for transmission, instead a VIA timer is used
-; trigger periodic buffer checks and to start the transmission of any data.
+; This code does not use ACIA interrupts directly by the status register is
+; still checked in the interrupt handler. In testing I found that ACIA would
+; not work it it was not regularly polled.
+;
+; A software semaphore cleared by a one short timer (VIA1 T2) is used to work
+; around the ACIA transmission silicon bug.
+;
+; TODO:
+;
+; No support for BRK in emulation mode.
+; Improve data memory bank handling.
 ;
 ;------------------------------------------------------------------------------
 
@@ -39,16 +47,13 @@
 ; Configuration
 ;------------------------------------------------------------------------------
 
-TIMER_HZ        equ     1000
+TIMER_HZ        equ     200                     ; Jiffy timer rate Hz
 
-BAUD_RATE       equ     19200
-
-RX_SIZE         equ     32
-TX_SIZE         equ     32
+BAUD_RATE       equ     19200                   ; ACIA baud rate
 
 ;------------------------------------------------------------------------------
 
-TMR_COUNT       equ     OSC_FREQ/TIMER_HZ
+TMR_COUNT       equ     OSC_FREQ/TIMER_HZ-2
 
                 if      TMR_COUNT&$ffff0000
                 messg   "TMR_COUNT does not fit in 16-bits"
@@ -67,17 +72,14 @@ TXD_COUNT       equ     OSC_FREQ/(BAUD_RATE/12)
                 data
                 org     $200
 
-LOCKS           ds      1
+LOCKS           ds      1                       ; Semaphore locks
 
-TX_LOCK         equ     $80
+TX_LOCK         equ     $80                     ; Indicates ACIA TX in flight
 
 ;------------------------------------------------------------------------------
 
-ML              ds      1
-MH              ds      1
-SC              ds      1
-MN              ds      1
-HR              ds      1
+JIFFY           ds      1                       ; Jiffy counter
+TIME            ds      4                       ; Seconds counter
 
 ;==============================================================================
 ; Power On Reset
@@ -87,6 +89,12 @@ HR              ds      1
                 extern  Start
 RESET:
                 stz     LOCKS                   ; Clear lock bits
+
+                stz     JIFFY                   ; Clear timer counters
+                stz     TIME+0
+                stz     TIME+1
+                stz     TIME+2
+                stz     TIME+3
 
                 lda     #%00011111              ; 8 bits, 1 stop bit, 19200 baud
                 sta     ACIA_CTL
@@ -108,8 +116,6 @@ RESET:
                 lda     VIA2_IER                ; Disable active interrupts
                 sta     VIA2_IER
                 cli
-                native
-
 loop:
                 jsr     UartRx
                 jsr     UartTx
@@ -144,7 +150,7 @@ NMIRQ:
 IRQ:
                 pha                             ; Save callers registers
                 phx
-                php
+                php                             ; Save current MX bits
                 short_ai                        ; Make registers 8-bit
                 jsr     Service                 ; Service the hardware
                 plp                             ; Restore register widths
@@ -155,7 +161,7 @@ IRQ:
 ; Handle IRQ interrupts in native mode.
 
 BRK:
-                rti
+                rti                             ; Loop forever
 
 ; Handle IRQ interrupts in native mode.
 
@@ -177,81 +183,66 @@ ABORT:
 ;------------------------------------------------------------------------------
 
 Service:
-                lda     VIA1_IFR                ; Is VIA1 the source?
-                bmi     $+5
-                jmp     VIA1Handled             ; No.
+                lda     ACIA_SR                 ; Read ACIA status
+                bpl     ACIAHandled
 
+ACIAHandled:
+
+;------------------------------------------------------------------------------
+ 
+                lda     VIA1_IFR                ; Is VIA1 the source?
+                bpl     VIA1Handled             ; No.
+
+                pha
                 and     #%01000000              ; Is Timer1 the source?
                 beq     VIA1T1Handled           ; No
-                lda	VIA1_T1CL               ; Clear the interrupt
+                lda     VIA1_T1CL               ; Clear the interrupt
 
-                sed
-                sec
-                lda     ML                      ; Bump lo milliseconds
-                adc     #0
-                sta     ML
-                bcc     TimeUpdated
-                lda     MH                      ; Bump hi milliseconds
-                adc     #0
-                sta     MH
-                bcc     TimeUpdated
-                lda     SC                      ; Bump seconds
-                adc     #0
-                cmp     #$60
-                bne     $+4
-                lda     #0
-                sta     SC
-                bcc     TimeUpdated
-                lda     MN                      ; Bump minutes
-                adc     #0
-                cmp     #$60
-                bne     $+4
-                lda     #0
-                sta     MN
-                bcc     TimeUpdated
-                lda     HR                      ; Bump hours
-                adc     #0
-                cmp     #$60
-                bne     $+4
-                lda     #0
-                sta     HR
-                bcc     TimeUpdated
-                ; TODO: Bump the rest of the time
-TimeUpdated:
-                cld
+                inc     JIFFY                   ; Bump jiffy counter
+                lda     JIFFY
+                cmp     #TIMER_HZ               ; Reached a second?
+                bne     VIA1T1Handled           ; No.
+
+                stz     JIFFY                   ; Reset jiffy counter
+                inc     TIME+0                  ; And bump main timer
+                bne     VIA1T1Handled
+                inc     TIME+1
+                bne     VIA1T1Handled
+                inc     TIME+2
+                bne     VIA1T1Handled
+                inc     TIME+3
 VIA1T1Handled:
 
-                lda     VIA1_IFR                ; Is Timer2 the source
+                pla                             ; Is Timer2 the source
                 and     #%00100000
                 beq     VIA1T2Handled           ; No.
-                lda	VIA1_T2CL               ; Clear the interrupt
+                lda     VIA1_T2CL               ; Clear the interrupt
 
-                lda     #TX_LOCK                ; Lock TX hardware
+                lda     #%00100000              ; Disable T2 interrupt
+                sta     VIA1_IER
+                lda     #TX_LOCK                ; Unlock TX hardware
                 trb     LOCKS
 VIA1T2Handled:
+
 VIA1Handled:
 
 ;------------------------------------------------------------------------------
 
+                lda     VIA2_IFR                ; Is VIA2 the source?
+                bpl     VIA2Handled             ; No.
+
 VIA2Handled:
-                rts                             ; Done
 
 ;------------------------------------------------------------------------------
 
-NORM_DAYS:      db      $00,$31,$28,$31,$30,$31,$30,$31
-                db      $31,$30,$00,$00,$00,$00,$00,$00
-                db      $31,$30,$31
-
-LEAP_DAYS:      db      $00,$31,$29,$31,$30,$31,$30,$31
-                db      $31,$30,$00,$00,$00,$00,$00,$00
-                db      $31,$30,$31
+                rts                             ; Done
 
 ;==============================================================================
 ; Buffered UART Interface
 ;------------------------------------------------------------------------------
 
-; Adds the characater in A to the transmit buffer and change the ACIA settings
-; to enable a transmit interrupt when its is ready to send.
+; Adds the characater in A to the transmit buffer and configure T2 for a one
+; shot interrupt when its transmission should be complete.
 
                 public  UartTx
 UartTx:
@@ -259,10 +250,9 @@ UartTx:
                 php                             ; .. and MX bits
                 short_a                         ; Ensure 8-bits
                 pha
-                lda     #TX_LOCK                ; Wait if TX operation
-TxWait:         bit     LOCKS                   ; .. is still on going
-                bne     TxWait
-                tsb     LOCKS                   ; Mark TX as in use
+                lda     #TX_LOCK                ; Try to obtain lock on
+TxWait:         tsb     LOCKS                   ; .. TX register
+                bne     TxWait                  ; Wait until gained
                 pla
                 sta     ACIA_TXD                ; Transmit the character
                 lda     #<TXD_COUNT             ; Load transmission oounter
@@ -283,12 +273,12 @@ UartRx:
                 php                             ; Save current MX settings
                 short_a                         ; .. and ensure 8-bits
 RxWait:
-                lda     ACIA_SR
+                lda     ACIA_SR                 ; Any data in the RX buffer
                 and     #$08
-                beq     RxWait
-                lda     ACIA_RXD
+                beq     RxWait                  ; No, wait for some
+                lda     ACIA_RXD                ; Recover the received data
                 plp
-                rts
+                rts                             ; Done
 
 ;==============================================================================
 ; Reset Vectors

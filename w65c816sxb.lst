@@ -1,4 +1,4 @@
-  Sun Aug 16 2015 23:19                                                                                                    Page 1
+  Mon Aug 17 2015 15:45                                                                                                    Page 1
 
 
                                                ***************************************
@@ -28,20 +28,28 @@
     19                        ;==============================================================================
     20                        ; Notes:
     21                        ;
-    22                        ; ACIA interrupts are used to handle recieved serial data but the silicon bug
-    23                        ; prevents them from being used for transmission, instead a VIA timer is used
-    24                        ; trigger periodic buffer checks and to start the transmission of any data.
+    22                        ; This code does not use ACIA interrupts directly by the status register is
+    23                        ; still checked in the interrupt handler. In testing I found that ACIA would
+    24                        ; not work it it was not regularly polled.
     25                        ;
-    26                        ;------------------------------------------------------------------------------
-    27                        
-    28                                        pw      132
-    29                                        inclist on
-    30                        
-    31                                        chip    65816
-    32                                        longi   off
-    33                                        longa   off
-    34                        
-    35                                        include "w65c816.inc"
+    26                        ; A software semaphore cleared by a one short timer (VIA1 T2) is used to work
+    27                        ; around the ACIA transmission silicon bug.
+    28                        ;
+    29                        ; TODO:
+    30                        ;
+    31                        ; No support for BRK in emulation mode.
+    32                        ; Improve data memory bank handling.
+    33                        ;
+    34                        ;------------------------------------------------------------------------------
+    35                        
+    36                                        pw      132
+    37                                        inclist on
+    38                        
+    39                                        chip    65816
+    40                                        longi   off
+    41                                        longa   off
+    42                        
+    43                                        include "w65c816.inc"
      1                        ;==============================================================================
      2                        ; __        ____  ____   ____ ___  _  __   
      3                        ; \ \      / / /_| ___| / ___( _ )/ |/ /_  
@@ -51,89 +59,108 @@
      7                        ;
      8                        ; Western Design Center W65C816 device definitions                                          
      9                        ;------------------------------------------------------------------------------
-    10                        
-    11                        
-    12                        ;==============================================================================
-    13                        ; Status Register Bits
-    14                        ;------------------------------------------------------------------------------
-    15                        
-    16             00000007   N_FLAG          equ     7
-    17             00000006   V_FLAG          equ     6
-  Sun Aug 16 2015 23:19                                                                                                    Page 2
+  Mon Aug 17 2015 15:45                                                                                                    Page 2
 
 
-    18             00000005   M_FLAG          equ     5
-    19             00000004   X_FLAG          equ     4
-    20             00000004   B_FLAG          equ     4
-    21             00000003   D_FLAG          equ     3
-    22             00000002   I_FLAG          equ     2
-    23             00000001   Z_FLAG          equ     1
-    24             00000000   C_FLAG          equ     0
+    10                        ; Copyright (C)2015 HandCoded Software Ltd.
+    11                        ; All rights reserved.
+    12                        ;
+    13                        ; This work is made available under the terms of the Creative Commons
+    14                        ; Attribution-NonCommercial-ShareAlike 4.0 International license. Open the
+    15                        ; following URL to see the details.
+    16                        ;
+    17                        ; http://creativecommons.org/licenses/by-nc-sa/4.0/
+    18                        ;
+    19                        ;==============================================================================
+    20                        ; Notes:
+    21                        ;
+    22                        ; Various macros and definitions for the W65C816 microprocessor.
+    23                        ;
+    24                        ;------------------------------------------------------------------------------
     25                        
     26                        ;==============================================================================
-    27                        ; Macros
+    27                        ; Status Register Bits
     28                        ;------------------------------------------------------------------------------
     29                        
-    30                        ; Puts the processor in emulation mode. A, X and Y become 8-bits and the stack
-    31                        ; is fixed at $0100-$01ff. 
-    32                        
-    33                        emulate         macro
-    34                                        sec
-    35                                        xce
-    36                                        endm
-    37                        
-    38                        ; Puts the processor in native mode. The size of the memory and index register
-    39                        ; operations is not controlled by the M & X bits in the status register.
-    40                        
-    41                        native          macro
-    42                                        clc
-    43                                        xce
-    44                                        endm
-    45                        
-    46                        ; Resets the M bit making the accumator and memory accesses 16-bits wide.
-    47                         
-    48                        long_a          macro
-    49                                        rep     #(1<<M_FLAG)
-    50                                        longa   on
-    51                                        endm
-    52                        
-    53                        ; Resets the X bit making the index registers 16-bits wide
+    30             00000007   N_FLAG          equ     7
+    31             00000006   V_FLAG          equ     6
+    32             00000005   M_FLAG          equ     5
+    33             00000004   X_FLAG          equ     4
+    34             00000004   B_FLAG          equ     4
+    35             00000003   D_FLAG          equ     3
+    36             00000002   I_FLAG          equ     2
+    37             00000001   Z_FLAG          equ     1
+    38             00000000   C_FLAG          equ     0
+    39                        
+    40                        ;==============================================================================
+    41                        ; Macros
+    42                        ;------------------------------------------------------------------------------
+    43                        
+    44                        ; Puts the processor into emulation mode. A, X and Y become 8-bits and the
+    45                        ; stack is fixed at $0100-$01ff. 
+    46                        
+    47                        emulate         macro
+    48                                        sec
+    49                                        xce
+    50                                        endm
+    51                        
+    52                        ; Puts the processor into native mode. The size of the memory and index
+    53                        ; register operations is controlled by the M & X bits in the status register.
     54                        
-    55                        long_i          macro
-    56                                        rep     #(1<<X_FLAG)
-    57                                        longi   on
+    55                        native          macro
+    56                                        clc
+    57                                        xce
     58                                        endm
     59                        
-    60                        ; Resets the M and X bits making the accumator, memory accesses and index
-    61                        ; registers 16-bits wide.
-    62                                        
-    63                        long_ai         macro
-    64                                        rep     #(1<<M_FLAG)|(1<<X_FLAG)
-    65                                        longa   on
-    66                                        longi   on
-    67                                        endm
+    60                        ; Resets the M bit making the accumator and memory accesses 16-bits wide.
+    61                         
+    62                        long_a          macro
+    63                                        rep     #(1<<M_FLAG)
+    64                                        longa   on
+    65                                        endm
+    66                        
+    67                        ; Resets the X bit making the index registers 16-bits wide
+  Mon Aug 17 2015 15:45                                                                                                    Page 3
+
+
     68                        
-    69                        ; Sets the M bit making the accumator and memory accesses 16-bits wide.
-    70                        
-    71                        short_a         macro
-    72                                        sep     #(1<<M_FLAG)
-    73                                        longa   off
-    74                                        endm
-    75                        
-  Sun Aug 16 2015 23:19                                                                                                    Page 3
-
-
-    76                        short_i         macro
-    77                                        sep     #(1<<X_FLAG)
-    78                                        longi   off
-    79                                        endm
-    80                                        
-    81                        short_ai        macro
-    82                                        sep     #(1<<M_FLAG)|(1<<X_FLAG)
-    83                                        longa   off
-    84                                        longi   off
-    85                                        endm
-    36                                        include "w65c816sxb.inc"
+    69                        long_i          macro
+    70                                        rep     #(1<<X_FLAG)
+    71                                        longi   on
+    72                                        endm
+    73                        
+    74                        ; Resets the M and X bits making the accumator, memory accesses and index
+    75                        ; registers 16-bits wide.
+    76                                        
+    77                        long_ai         macro
+    78                                        rep     #(1<<M_FLAG)|(1<<X_FLAG)
+    79                                        longa   on
+    80                                        longi   on
+    81                                        endm
+    82                        
+    83                        ; Sets the M bit making the accumator and memory accesses 16-bits wide.
+    84                        
+    85                        short_a         macro
+    86                                        sep     #(1<<M_FLAG)
+    87                                        longa   off
+    88                                        endm
+    89                        
+    90                        ; Sets the X bit making the index registers 8-bits wide
+    91                        
+    92                        short_i         macro
+    93                                        sep     #(1<<X_FLAG)
+    94                                        longi   off
+    95                                        endm
+    96                                        
+    97                        ; Sets the M and X bits making the accumator, memory accesses and index
+    98                        ; registers 8-bits wide.
+    99                        
+   100                        short_ai        macro
+   101                                        sep     #(1<<M_FLAG)|(1<<X_FLAG)
+   102                                        longa   off
+   103                                        longi   off
+   104                                        endm
+    44                                        include "w65c816sxb.inc"
      1                        ;==============================================================================
      2                        ; __        ____  ____   ____ ___  _  __  ______  ______
      3                        ; \ \      / / /_| ___| / ___( _ )/ |/ /_/ ___\ \/ / __ )
@@ -154,6 +181,9 @@
     18                        ;
     19                        ;==============================================================================
     20                        ; Notes:
+  Mon Aug 17 2015 15:45                                                                                                    Page 4
+
+
     21                        ;
     22                        ; All of the current stock of W65C51 ACIAs have a silicon bug that causes the
     23                        ; 'Transmit Data Register Empty' (TDRE) bit in the status register to be stuck
@@ -181,9 +211,6 @@
     45             00007FA0   PIA_PIA         equ     $7fa0
     46             00007FA0   PIA_DDRA        equ     $7fa0
     47             00007FA1   PIA_CRA         equ     $7fa1
-  Sun Aug 16 2015 23:19                                                                                                    Page 4
-
-
     48             00007FA2   PIA_PIB         equ     $7fa2
     49             00007FA2   PIA_DDRB        equ     $7fa2
     50             00007FA3   PIA_CRB         equ     $7fa3
@@ -215,6 +242,9 @@
     76                        ;------------------------------------------------------------------------------
     77                        
     78             00007FE0   VIA2_ORB        equ     $7fe0
+  Mon Aug 17 2015 15:45                                                                                                    Page 5
+
+
     79             00007FE0   VIA2_IRB        equ     $7fe0
     80             00007FE1   VIA2_ORA        equ     $7fe1
     81             00007FE1   VIA2_IRA        equ     $7fe1
@@ -233,356 +263,314 @@
     94             00007FEE   VIA2_IER        equ     $7fee
     95             00007FEF   VIA2_ORAN       equ     $7fef
     96             00007FEF   VIA2_IRAN       equ     $7fef
-    37                        
-    38                        ;==============================================================================
-    39                        ; Configuration
-    40                        ;------------------------------------------------------------------------------
-    41                        
-    42             000003E8   TIMER_HZ        equ     1000
-    43                        
-    44             00004B00   BAUD_RATE       equ     19200
     45                        
-  Sun Aug 16 2015 23:19                                                                                                    Page 5
-
-
-    46             00000020   RX_SIZE         equ     32
-    47             00000020   TX_SIZE         equ     32
-    48                        
-    49                        ;------------------------------------------------------------------------------
-    50                        
-    51             00001F40   TMR_COUNT       equ     OSC_FREQ/TIMER_HZ
-    52                        
-    53                                        if      TMR_COUNT&$ffff0000
-    54                                        messg   "TMR_COUNT does not fit in 16-bits"
-    55                                        endif
-    56                        
-    57             00001388   TXD_COUNT       equ     OSC_FREQ/(BAUD_RATE/12)
-    58                        
-    59                                        if      TXD_DELAY&$ffff0000
-    60                                        messg   "TXD_DELAY does not fit in 16-bits"
-    61                                        endif
-    62                        
-    63                        ;==============================================================================
-    64                        ; Data Areas
-    65                        ;------------------------------------------------------------------------------
-    66                        
-    67                                        data
-    68                                        org     $200
-    69                        
-    70 00:0200:              LOCKS           ds      1
+    46                        ;==============================================================================
+    47                        ; Configuration
+    48                        ;------------------------------------------------------------------------------
+    49                        
+    50             000000C8   TIMER_HZ        equ     200                     ; Jiffy timer rate Hz
+    51                        
+    52             00004B00   BAUD_RATE       equ     19200                   ; ACIA baud rate
+    53                        
+    54                        ;------------------------------------------------------------------------------
+    55                        
+    56             00009C3E   TMR_COUNT       equ     OSC_FREQ/TIMER_HZ-2
+    57                        
+    58                                        if      TMR_COUNT&$ffff0000
+    59                                        messg   "TMR_COUNT does not fit in 16-bits"
+    60                                        endif
+    61                        
+    62             00001388   TXD_COUNT       equ     OSC_FREQ/(BAUD_RATE/12)
+    63                        
+    64                                        if      TXD_DELAY&$ffff0000
+    65                                        messg   "TXD_DELAY does not fit in 16-bits"
+    66                                        endif
+    67                        
+    68                        ;==============================================================================
+    69                        ; Data Areas
+    70                        ;------------------------------------------------------------------------------
     71                        
-    72             00000080   TX_LOCK         equ     $80
-    73                        
-    74                        ;------------------------------------------------------------------------------
-    75                        
-    76 00:0201:              ML              ds      1
-    77 00:0202:              MH              ds      1
-    78 00:0203:              SC              ds      1
-    79 00:0204:              MN              ds      1
-    80 00:0205:              HR              ds      1
-    81                        
-    82                        ;==============================================================================
-    83                        ; Power On Reset
-    84                        ;------------------------------------------------------------------------------
-    85                        
-    86                                        code
-    87                                        extern  Start
-    88                        RESET:
-    89 00:0000: 9C 00 02                     stz     LOCKS                   ; Clear lock bits
-    90                        
-    91 00:0003: A9 1F                        lda     #%00011111              ; 8 bits, 1 stop bit, 19200 baud
-    92 00:0005: 8D 83 7F                     sta     ACIA_CTL
-    93 00:0008: A9 09                        lda     #%00001001              ; No parity, no interrupt
-    94 00:000A: 8D 82 7F                     sta     ACIA_CMD
-    95 00:000D: AD 80 7F                     lda     ACIA_RXD                ; Clear receive buffer
-    96                        
-    97 00:0010: AD CE 7F                     lda     VIA1_IER                ; Disable active interrupts
-    98 00:0013: 8D CE 7F                     sta     VIA1_IER
-    99 00:0016: A9 40                        lda     #%01000000              ; Configure VIA Timers
-   100 00:0018: 8D CB 7F                     sta     VIA1_ACR
-   101 00:001B: A9 40                        lda     #<TMR_COUNT             ; Set timer latches
-   102 00:001D: 8D C4 7F                     sta     VIA1_T1CL
-   103 00:0020: A9 1F                        lda     #>TMR_COUNT
-  Sun Aug 16 2015 23:19                                                                                                    Page 6
+    72                                        data
+    73                                        org     $200
+    74                        
+    75 00:0200:              LOCKS           ds      1                       ; Semaphore locks
+    76                        
+    77             00000080   TX_LOCK         equ     $80                     ; Indicates ACIA TX in flight
+    78                        
+    79                        ;------------------------------------------------------------------------------
+    80                        
+    81 00:0201:              JIFFY           ds      1                       ; Jiffy counter
+    82 00:0202:              TIME            ds      4                       ; Seconds counter
+    83                        
+    84                        ;==============================================================================
+  Mon Aug 17 2015 15:45                                                                                                    Page 6
 
 
-   104 00:0022: 8D C5 7F                     sta     VIA1_T1CH
-   105 00:0025: A9 C0                        lda     #%11000000              ; Enable Timer1 interrupt
-   106 00:0027: 8D CE 7F                     sta     VIA1_IER
-   107                        
-   108 00:002A: AD EE 7F                     lda     VIA2_IER                ; Disable active interrupts
-   109 00:002D: 8D EE 7F                     sta     VIA2_IER
-   110 00:0030: 58                           cli
-   111                                        native
-+  111 00:0031: 18                           clc
-+  111 00:0032: FB                           xce
-   112                        
-   113                        loop:
-   114 00:0033: 20 xx xx                     jsr     UartRx
-   115 00:0036: 20 xx xx                     jsr     UartTx
-   116 00:0039: 80 F8                        bra     loop
-   117                        
-   118 00:003B: 4C xx xx                     jmp     Start                   ; Jump to the application start
-   119                        
-   120                        ;==============================================================================
-   121                        ; Interrupt Handlers
-   122                        ;------------------------------------------------------------------------------
+    85                        ; Power On Reset
+    86                        ;------------------------------------------------------------------------------
+    87                        
+    88                                        code
+    89                                        extern  Start
+    90                        RESET:
+    91 00:0000: 9C 00 02                     stz     LOCKS                   ; Clear lock bits
+    92                        
+    93 00:0003: 9C 01 02                     stz     JIFFY                   ; Clear timer counters
+    94 00:0006: 9C 02 02                     stz     TIME+0
+    95 00:0009: 9C 03 02                     stz     TIME+1
+    96 00:000C: 9C 04 02                     stz     TIME+2
+    97 00:000F: 9C 05 02                     stz     TIME+3
+    98                        
+    99 00:0012: A9 1F                        lda     #%00011111              ; 8 bits, 1 stop bit, 19200 baud
+   100 00:0014: 8D 83 7F                     sta     ACIA_CTL
+   101 00:0017: A9 09                        lda     #%00001001              ; No parity, no interrupt
+   102 00:0019: 8D 82 7F                     sta     ACIA_CMD
+   103 00:001C: AD 80 7F                     lda     ACIA_RXD                ; Clear receive buffer
+   104                        
+   105 00:001F: AD CE 7F                     lda     VIA1_IER                ; Disable active interrupts
+   106 00:0022: 8D CE 7F                     sta     VIA1_IER
+   107 00:0025: A9 40                        lda     #%01000000              ; Configure VIA Timers
+   108 00:0027: 8D CB 7F                     sta     VIA1_ACR
+   109 00:002A: A9 3E                        lda     #<TMR_COUNT             ; Set timer counts
+   110 00:002C: 8D C4 7F                     sta     VIA1_T1CL
+   111 00:002F: A9 9C                        lda     #>TMR_COUNT
+   112 00:0031: 8D C5 7F                     sta     VIA1_T1CH
+   113 00:0034: A9 C0                        lda     #%11000000              ; Enable Timer1 interrupt
+   114 00:0036: 8D CE 7F                     sta     VIA1_IER
+   115                        
+   116 00:0039: AD EE 7F                     lda     VIA2_IER                ; Disable active interrupts
+   117 00:003C: 8D EE 7F                     sta     VIA2_IER
+   118 00:003F: 58                           cli
+   119                        loop:
+   120 00:0040: 20 xx xx                     jsr     UartRx
+   121 00:0043: 20 xx xx                     jsr     UartTx
+   122 00:0046: 80 F8                        bra     loop
    123                        
-   124                        ; Handle IRQ and BRK interrupts in emulation mode.
-   125                        ; -- Currently this code assumes only IRQs will occur
-   126                        
-   127                        IRQBRK:
-   128 00:003E: 48                           pha                             ; Save callers registers
-   129 00:003F: DA                           phx
-   130 00:0040: 20 xx xx                     jsr     Service                 ; Service the hardware
-   131 00:0043: FA                           plx                             ; Restore registers
-   132 00:0044: 68                           pla
-   133 00:0045: 40                           rti                             ; Done
-   134                        
-   135                        ; Handle NMI interrupts in emulation mode.
-   136                        
-   137                        NMIRQ:
-   138 00:0046: 40                           rti
-   139                        
-   140                        ;------------------------------------------------------------------------------
-   141                        
-   142                        ; Handle IRQ interrupts in native mode.
-   143                        
-   144                        IRQ:
-   145 00:0047: 48                           pha                             ; Save callers registers
-   146 00:0048: DA                           phx
-   147 00:0049: 08                           php
-   148                                        short_ai                        ; Make registers 8-bit
-+  148 00:004A: E2 30                        sep     #(1<<M_FLAG)|(1<<X_FLAG)
-+  148                                        longa   off
-+  148                                        longi   off
-   149 00:004C: 20 xx xx                     jsr     Service                 ; Service the hardware
-   150 00:004F: 28                           plp                             ; Restore register widths
-   151 00:0050: FA                           plx                             ; .. and values
-   152 00:0051: 68                           pla
-   153 00:0052: 40                           rti                             ; Done
-   154                        
-   155                        ; Handle IRQ interrupts in native mode.
-   156                        
-  Sun Aug 16 2015 23:19                                                                                                    Page 7
+   124 00:0048: 4C xx xx                     jmp     Start                   ; Jump to the application start
+   125                        
+   126                        ;==============================================================================
+   127                        ; Interrupt Handlers
+   128                        ;------------------------------------------------------------------------------
+   129                        
+   130                        ; Handle IRQ and BRK interrupts in emulation mode.
+   131                        ; -- Currently this code assumes only IRQs will occur
+   132                        
+   133                        IRQBRK:
+   134 00:004B: 48                           pha                             ; Save callers registers
+   135 00:004C: DA                           phx
+   136 00:004D: 20 xx xx                     jsr     Service                 ; Service the hardware
+   137 00:0050: FA                           plx                             ; Restore registers
+   138 00:0051: 68                           pla
+   139 00:0052: 40                           rti                             ; Done
+   140                        
+   141                        ; Handle NMI interrupts in emulation mode.
+   142                        
+  Mon Aug 17 2015 15:45                                                                                                    Page 7
 
 
-   157                        BRK:
-   158 00:0053: 40                           rti
-   159                        
-   160                        ; Handle IRQ interrupts in native mode.
-   161                        
-   162                        NMI:
-   163 00:0054: 40                           rti
-   164                        
-   165                        ;------------------------------------------------------------------------------
-   166                        
-   167                        ; COP and ABORT interrupts are not handled.
-   168                        
-   169                        COP:
-   170 00:0055: 80 FE                        bra     $                       ; Loop forever
-   171                        
-   172                        ABORT:
-   173 00:0057: 80 FE                        bra     $                       ; Loop forever
+   143                        NMIRQ:
+   144 00:0053: 40                           rti
+   145                        
+   146                        ;------------------------------------------------------------------------------
+   147                        
+   148                        ; Handle IRQ interrupts in native mode.
+   149                        
+   150                        IRQ:
+   151 00:0054: 48                           pha                             ; Save callers registers
+   152 00:0055: DA                           phx
+   153 00:0056: 08                           php                             ; Save current MX bits
+   154                                        short_ai                        ; Make registers 8-bit
++  154 00:0057: E2 30                        sep     #(1<<M_FLAG)|(1<<X_FLAG)
++  154                                        longa   off
++  154                                        longi   off
+   155 00:0059: 20 xx xx                     jsr     Service                 ; Service the hardware
+   156 00:005C: 28                           plp                             ; Restore register widths
+   157 00:005D: FA                           plx                             ; .. and values
+   158 00:005E: 68                           pla
+   159 00:005F: 40                           rti                             ; Done
+   160                        
+   161                        ; Handle IRQ interrupts in native mode.
+   162                        
+   163                        BRK:
+   164 00:0060: 40                           rti                             ; Loop forever
+   165                        
+   166                        ; Handle IRQ interrupts in native mode.
+   167                        
+   168                        NMI:
+   169 00:0061: 40                           rti
+   170                        
+   171                        ;------------------------------------------------------------------------------
+   172                        
+   173                        ; COP and ABORT interrupts are not handled.
    174                        
-   175                        ;==============================================================================
-   176                        ; Interrupt Servicing
-   177                        ;------------------------------------------------------------------------------
-   178                        
-   179                        Service:
-   180 00:0059: AD 81 7F     		lda	ACIA_SR
-   181 00:005C: 8D F0 00     		sta	$f0
-   182 00:005F: AD CD 7F     		lda	VIA1_IFR
-   183 00:0062: 8D F1 00     		sta	$f1
-   184 00:0065: AD CE 7F     		lda	VIA1_IER
-   185 00:0068: 8D F2 00     		sta	$f2
-   186 00:006B: AD ED 7F     		lda	VIA2_IFR
-   187 00:006E: 8D F3 00     		sta	$f3
-   188 00:0071: AD EE 7F     		lda	VIA2_IER
-   189 00:0074: 8D F4 00     		sta	$f4
+   175                        COP:
+   176 00:0062: 80 FE                        bra     $                       ; Loop forever
+   177                        
+   178                        ABORT:
+   179 00:0064: 80 FE                        bra     $                       ; Loop forever
+   180                        
+   181                        ;==============================================================================
+   182                        ; Interrupt Servicing
+   183                        ;------------------------------------------------------------------------------
+   184                        
+   185                        Service:
+   186 00:0066: AD 81 7F                     lda     ACIA_SR                 ; Read ACIA status
+   187 00:0069: 10 00                        bpl     ACIAHandled
+   188                        
+   189                        ACIAHandled:
    190                        
-   191 00:0077: AD CD 7F                     lda     VIA1_IFR                ; Is VIA1 the source?
-   192 00:007A: 30 03                        bmi     $+5
-   193 00:007C: 4C xx xx                     jmp     VIA1Handled             ; No.
-   194                        		
-   195 00:007F: EE F6 00     		inc	$f6
-   196                        
-   197 00:0082: 29 40                        and     #%01000000              ; Is Timer1 the source?
-   198 00:0084: F0 4D                        beq     VIA1T1Handled           ; No
-   199 00:0086: AD C4 7F                     lda	VIA1_T1CL               ; Clear the interrupt
+   191                        ;------------------------------------------------------------------------------
+   192                         
+   193 00:006B: AD CD 7F                     lda     VIA1_IFR                ; Is VIA1 the source?
+   194 00:006E: 10 39                        bpl     VIA1Handled             ; No.
+   195                        
+   196 00:0070: 48                           pha
+   197 00:0071: 29 40                        and     #%01000000              ; Is Timer1 the source?
+  Mon Aug 17 2015 15:45                                                                                                    Page 8
+
+
+   198 00:0073: F0 22                        beq     VIA1T1Handled           ; No
+   199 00:0075: AD C4 7F                     lda     VIA1_T1CL               ; Clear the interrupt
    200                        
-   201 00:0089: EE F7 00     		inc	$f7
-   202                        		
-   203 00:008C: F8                           sed
-   204 00:008D: 38                           sec
-   205 00:008E: AD 01 02                     lda     ML                      ; Bump lo milliseconds
-   206 00:0091: 69 00                        adc     #0
-   207 00:0093: 8D 01 02                     sta     ML
-   208 00:0096: 90 3A                        bcc     TimeUpdated
-   209 00:0098: AD 02 02                     lda     MH                      ; Bump hi milliseconds
-   210 00:009B: 69 00                        adc     #0
-   211 00:009D: 8D 02 02                     sta     MH
-   212 00:00A0: 90 30                        bcc     TimeUpdated
-   213 00:00A2: AD 03 02                     lda     SC                      ; Bump seconds
-   214 00:00A5: 69 00                        adc     #0
-  Sun Aug 16 2015 23:19                                                                                                    Page 8
-
-
-   215 00:00A7: C9 60                        cmp     #$60
-   216 00:00A9: D0 02                        bne     $+4
-   217 00:00AB: A9 00                        lda     #0
-   218 00:00AD: 8D 03 02                     sta     SC
-   219 00:00B0: 90 20                        bcc     TimeUpdated
-   220 00:00B2: AD 04 02                     lda     MN                      ; Bump minutes
-   221 00:00B5: 69 00                        adc     #0
-   222 00:00B7: C9 60                        cmp     #$60
-   223 00:00B9: D0 02                        bne     $+4
-   224 00:00BB: A9 00                        lda     #0
-   225 00:00BD: 8D 04 02                     sta     MN
-   226 00:00C0: 90 10                        bcc     TimeUpdated
-   227 00:00C2: AD 05 02                     lda     HR                      ; Bump hours
-   228 00:00C5: 69 00                        adc     #0
-   229 00:00C7: C9 60                        cmp     #$60
-   230 00:00C9: D0 02                        bne     $+4
-   231 00:00CB: A9 00                        lda     #0
-   232 00:00CD: 8D 05 02                     sta     HR
-   233 00:00D0: 90 00                        bcc     TimeUpdated
-   234                                        ; TODO: Bump the rest of the time
-   235                        TimeUpdated:
-   236 00:00D2: D8                           cld
-   237                        VIA1T1Handled:
-   238                        
-   239 00:00D3: AD CD 7F                     lda     VIA1_IFR                ; Is Timer2 the source
-   240 00:00D6: 29 20                        and     #%00100000
-   241 00:00D8: F0 08                        beq     VIA1T2Handled           ; No.
-   242 00:00DA: AD C8 7F                     lda	VIA1_T2CL               ; Clear the interrupt
+   201 00:0078: EE 01 02                     inc     JIFFY                   ; Bump jiffy counter
+   202 00:007B: AD 01 02                     lda     JIFFY
+   203 00:007E: C9 C8                        cmp     #TIMER_HZ               ; Reached a second?
+   204 00:0080: D0 15                        bne     VIA1T1Handled           ; No.
+   205                        
+   206 00:0082: 9C 01 02                     stz     JIFFY                   ; Reset jiffy counter
+   207 00:0085: EE 02 02                     inc     TIME+0                  ; And bump main timer
+   208 00:0088: D0 0D                        bne     VIA1T1Handled
+   209 00:008A: EE 03 02                     inc     TIME+1
+   210 00:008D: D0 08                        bne     VIA1T1Handled
+   211 00:008F: EE 04 02                     inc     TIME+2
+   212 00:0092: D0 03                        bne     VIA1T1Handled
+   213 00:0094: EE 05 02                     inc     TIME+3
+   214                        VIA1T1Handled:
+   215                        
+   216 00:0097: 68                           pla                             ; Is Timer2 the source
+   217 00:0098: 29 20                        and     #%00100000
+   218 00:009A: F0 0D                        beq     VIA1T2Handled           ; No.
+   219 00:009C: AD C8 7F                     lda     VIA1_T2CL               ; Clear the interrupt
+   220                        
+   221 00:009F: A9 20                        lda     #%00100000              ; Disable T2 interrupt
+   222 00:00A1: 8D CE 7F                     sta     VIA1_IER
+   223 00:00A4: A9 80                        lda     #TX_LOCK                ; Unlock TX hardware
+   224 00:00A6: 1C 00 02                     trb     LOCKS
+   225                        VIA1T2Handled:
+   226                        
+   227                        VIA1Handled:
+   228                        
+   229                        ;------------------------------------------------------------------------------
+   230                        
+   231 00:00A9: AD ED 7F                     lda     VIA2_IFR                ; Is VIA2 the source?
+   232 00:00AC: 10 00                        bpl     VIA2Handled             ; No.
+   233                        
+   234                        VIA2Handled:
+   235                        
+   236                        ;------------------------------------------------------------------------------
+   237                        
+   238 00:00AE: 60                           rts                             ; Done
+   239                        
+   240                        ;==============================================================================
+   241                        ; Buffered UART Interface
+   242                        ;------------------------------------------------------------------------------
    243                        
-   244 00:00DD: A9 80                        lda     #TX_LOCK                ; Lock TX hardware
-   245 00:00DF: 1C 00 02                     trb     LOCKS
-   246                        VIA1T2Handled:
-   247                        VIA1Handled:
-   248                        
-   249                        ;------------------------------------------------------------------------------
-   250                        
-   251                        VIA2Handled:
-   252 00:00E2: 60                           rts                             ; Done
-   253                        
-   254                        ;------------------------------------------------------------------------------
-   255                        
-   256 00:00E3: 00 31 28 31  NORM_DAYS:      db      $00,$31,$28,$31,$30,$31,$30,$31
-       00:00E7: 30 31 30 31 
-   257 00:00EB: 31 30 00 00                  db      $31,$30,$00,$00,$00,$00,$00,$00
-       00:00EF: 00 00 00 00 
-   258 00:00F3: 31 30 31                     db      $31,$30,$31
-   259                        
-   260 00:00F6: 00 31 29 31  LEAP_DAYS:      db      $00,$31,$29,$31,$30,$31,$30,$31
-       00:00FA: 30 31 30 31 
-   261 00:00FE: 31 30 00 00                  db      $31,$30,$00,$00,$00,$00,$00,$00
-       00:0102: 00 00 00 00 
-   262 00:0106: 31 30 31                     db      $31,$30,$31
-   263                        
-   264                        ;==============================================================================
-   265                        ; Buffered UART Interface
-   266                        ;------------------------------------------------------------------------------
+   244                        ; Adds the characater in A to the transmit buffer and configure T2 for a one
+   245                        ; shot interrupt when its transmission should be complete.
+   246                        
+   247                                        public  UartTx
+   248                        UartTx:
+   249 00:00AF: 48                           pha                             ; Save callers A
+   250 00:00B0: 08                           php                             ; .. and MX bits
+   251                                        short_a                         ; Ensure 8-bits
++  251 00:00B1: E2 20                        sep     #(1<<M_FLAG)
++  251                                        longa   off
+   252 00:00B3: 48                           pha
+   253 00:00B4: A9 80                        lda     #TX_LOCK                ; Try to obtain lock on
+  Mon Aug 17 2015 15:45                                                                                                    Page 9
+
+
+   254 00:00B6: 0C 00 02     TxWait:         tsb     LOCKS                   ; .. TX register
+   255 00:00B9: D0 FB                        bne     TxWait                  ; Wait until gained
+   256 00:00BB: 68                           pla
+   257 00:00BC: 8D 80 7F                     sta     ACIA_TXD                ; Transmit the character
+   258 00:00BF: A9 88                        lda     #<TXD_COUNT             ; Load transmission oounter
+   259 00:00C1: 8D C8 7F                     sta     VIA1_T2CL
+   260 00:00C4: A9 13                        lda     #>TXD_COUNT
+   261 00:00C6: 8D C9 7F                     sta     VIA1_T2CH
+   262 00:00C9: A9 A0                        lda     #%10100000              ; And allow the interrupt
+   263 00:00CB: 8D CE 7F                     sta     VIA1_IER
+   264 00:00CE: 28                           plp                             ; Restore flags and A
+   265 00:00CF: 68                           pla
+   266 00:00D0: 60                           rts                             ; Done
    267                        
-   268                        ; Adds the characater in A to the transmit buffer and change the ACIA settings
-  Sun Aug 16 2015 23:19                                                                                                    Page 9
-
-
-   269                        ; to enable a transmit interrupt when its is ready to send.
+   268                        ; Fetch the next character from the RX buffer waiting for some to arrive if the
+   269                        ; buffer is empty.
    270                        
-   271                                        public  UartTx
-   272                        UartTx:
-   273 00:0109: 48                           pha                             ; Save callers A
-   274 00:010A: 08                           php                             ; .. and MX bits
-   275                                        short_a                         ; Ensure 8-bits
-+  275 00:010B: E2 20                        sep     #(1<<M_FLAG)
-+  275                                        longa   off
-   276 00:010D: 48                           pha
-   277 00:010E: A9 80                        lda     #TX_LOCK                ; Wait if TX operation
-   278 00:0110: 2C 00 02     TxWait:         bit     LOCKS                   ; .. is still on going
-   279 00:0113: D0 FB                        bne     TxWait
-   280 00:0115: 0C 00 02                     tsb     LOCKS                   ; Mark TX as in use
-   281 00:0118: 68                           pla
-   282 00:0119: 8D 80 7F                     sta     ACIA_TXD                ; Transmit the character
-   283 00:011C: A9 88                        lda     #<TXD_COUNT             ; Load transmission oounter
-   284 00:011E: 8D C8 7F                     sta     VIA1_T2CL
-   285 00:0121: A9 13                        lda     #>TXD_COUNT
-   286 00:0123: 8D C9 7F                     sta     VIA1_T2CH
-   287 00:0126: A9 A0                        lda     #%10100000              ; And allow the interrupt
-   288 00:0128: 8D CE 7F                     sta     VIA1_IER
-   289 00:012B: 28                           plp                             ; Restore flags and A
-   290 00:012C: 68                           pla
-   291 00:012D: 60                           rts                             ; Done
-   292                        
-   293                        ; Fetch the next character from the RX buffer waiting for some to arrive if the
-   294                        ; buffer is empty.
-   295                        
-   296                                        public  UartRx
-   297                        UartRx:
-   298 00:012E: 08                           php                             ; Save current MX settings
-   299                                        short_a                         ; .. and ensure 8-bits
-+  299 00:012F: E2 20                        sep     #(1<<M_FLAG)
-+  299                                        longa   off
-   300                        RxWait:
-   301 00:0131: AD 81 7F                     lda     ACIA_SR
-   302 00:0134: 29 08                        and     #$08
-   303 00:0136: F0 F9                        beq     RxWait
-   304 00:0138: AD 80 7F                     lda     ACIA_RXD
-   305 00:013B: 28                           plp
-   306 00:013C: 60                           rts
-   307                        
-   308                        ;==============================================================================
-   309                        ; Reset Vectors
-   310                        ;------------------------------------------------------------------------------
-   311                        
-   312                        ShadowVectors   section offset $7ee0
-   313                        
-   314 00:7EE0:                              ds      4               ; Reserved
-   315 00:7EE4: xx xx                        dw      COP             ; $FFE4 - COP(816)
-   316 00:7EE6: xx xx                        dw      BRK             ; $FFE6 - BRK(816)
-   317 00:7EE8: xx xx                        dw      ABORT           ; $FFE8 - ABORT(816)
-   318 00:7EEA: xx xx                        dw      NMI             ; $FFEA - NMI(816)
-   319 00:7EEC:                              ds      2               ; Reserved
-   320 00:7EEE: xx xx                        dw      IRQ             ; $FFEE - IRQ(816)
-   321                        
-   322 00:7EF0:                              ds      4
-  Sun Aug 16 2015 23:19                                                                                                    Page 10
+   271                                        public  UartRx
+   272                        UartRx:
+   273 00:00D1: 08                           php                             ; Save current MX settings
+   274                                        short_a                         ; .. and ensure 8-bits
++  274 00:00D2: E2 20                        sep     #(1<<M_FLAG)
++  274                                        longa   off
+   275                        RxWait:
+   276 00:00D4: AD 81 7F                     lda     ACIA_SR                 ; Any data in the RX buffer
+   277 00:00D7: 29 08                        and     #$08
+   278 00:00D9: F0 F9                        beq     RxWait                  ; No, wait for some
+   279 00:00DB: AD 80 7F                     lda     ACIA_RXD                ; Recover the received data
+   280 00:00DE: 28                           plp
+   281 00:00DF: 60                           rts                             ; Done
+   282                        
+   283                        ;==============================================================================
+   284                        ; Reset Vectors
+   285                        ;------------------------------------------------------------------------------
+   286                        
+   287                        ShadowVectors   section offset $7ee0
+   288                        
+   289 00:7EE0:                              ds      4               ; Reserved
+   290 00:7EE4: xx xx                        dw      COP             ; $FFE4 - COP(816)
+   291 00:7EE6: xx xx                        dw      BRK             ; $FFE6 - BRK(816)
+   292 00:7EE8: xx xx                        dw      ABORT           ; $FFE8 - ABORT(816)
+   293 00:7EEA: xx xx                        dw      NMI             ; $FFEA - NMI(816)
+   294 00:7EEC:                              ds      2               ; Reserved
+   295 00:7EEE: xx xx                        dw      IRQ             ; $FFEE - IRQ(816)
+   296                        
+   297 00:7EF0:                              ds      4
+   298 00:7EF4: xx xx                        dw      COP             ; $FFF4 - COP(C02)
+   299 00:7EF6:                              ds      2               ; $Reserved
+   300 00:7EF8: xx xx                        dw      ABORT           ; $FFF8 - ABORT(C02)
+   301 00:7EFA: xx xx                        dw      NMIRQ           ; $FFFA - NMI(C02)
+   302 00:7EFC: xx xx                        dw      RESET           ; $FFFC - RESET(C02)
+   303 00:7EFE: xx xx                        dw      IRQBRK          ; $FFFE - IRQBRK(C02)
+   304                        
+   305 00:7F00:                              ends
+   306                        
+   307                        ;------------------------------------------------------------------------------
+   308                        
+   309                        Vectors         section offset $ffe0
+  Mon Aug 17 2015 15:45                                                                                                    Page 10
 
 
-   323 00:7EF4: xx xx                        dw      COP             ; $FFF4 - COP(C02)
-   324 00:7EF6:                              ds      2               ; $Reserved
-   325 00:7EF8: xx xx                        dw      ABORT           ; $FFF8 - ABORT(C02)
-   326 00:7EFA: xx xx                        dw      NMIRQ           ; $FFFA - NMI(C02)
-   327 00:7EFC: xx xx                        dw      RESET           ; $FFFC - RESET(C02)
-   328 00:7EFE: xx xx                        dw      IRQBRK          ; $FFFE - IRQBRK(C02)
-   329                        
-   330 00:7F00:                              ends
-   331                        
-   332                        ;------------------------------------------------------------------------------
-   333                        
-   334                        Vectors         section offset $ffe0
-   335                        
-   336 00:FFE0:                              ds      4               ; Reserved
-   337 00:FFE4: xx xx                        dw      COP             ; $FFE4 - COP(816)
-   338 00:FFE6: xx xx                        dw      BRK             ; $FFE6 - BRK(816)
-   339 00:FFE8: xx xx                        dw      ABORT           ; $FFE8 - ABORT(816)
-   340 00:FFEA: xx xx                        dw      NMI             ; $FFEA - NMI(816)
-   341 00:FFEC:                              ds      2               ; Reserved
-   342 00:FFEE: xx xx                        dw      IRQ             ; $FFEE - IRQ(816)
-   343                        
-   344 00:FFF0:                              ds      4
-   345 00:FFF4: xx xx                        dw      COP             ; $FFF4 - COP(C02)
-   346 00:FFF6:                              ds      2               ; $Reserved
-   347 00:FFF8: xx xx                        dw      ABORT           ; $FFF8 - ABORT(C02)
-   348 00:FFFA: xx xx                        dw      NMIRQ           ; $FFFA - NMI(C02)
-   349 00:FFFC: xx xx                        dw      RESET           ; $FFFC - RESET(C02)
-   350 00:FFFE: xx xx                        dw      IRQBRK          ; $FFFE - IRQBRK(C02)
-   351                        
-   352 01:0000:                              ends
-   353                        
-   354                                        end
+   310                        
+   311 00:FFE0:                              ds      4               ; Reserved
+   312 00:FFE4: xx xx                        dw      COP             ; $FFE4 - COP(816)
+   313 00:FFE6: xx xx                        dw      BRK             ; $FFE6 - BRK(816)
+   314 00:FFE8: xx xx                        dw      ABORT           ; $FFE8 - ABORT(816)
+   315 00:FFEA: xx xx                        dw      NMI             ; $FFEA - NMI(816)
+   316 00:FFEC:                              ds      2               ; Reserved
+   317 00:FFEE: xx xx                        dw      IRQ             ; $FFEE - IRQ(816)
+   318                        
+   319 00:FFF0:                              ds      4
+   320 00:FFF4: xx xx                        dw      COP             ; $FFF4 - COP(C02)
+   321 00:FFF6:                              ds      2               ; $Reserved
+   322 00:FFF8: xx xx                        dw      ABORT           ; $FFF8 - ABORT(C02)
+   323 00:FFFA: xx xx                        dw      NMIRQ           ; $FFFA - NMI(C02)
+   324 00:FFFC: xx xx                        dw      RESET           ; $FFFC - RESET(C02)
+   325 00:FFFE: xx xx                        dw      IRQBRK          ; $FFFE - IRQBRK(C02)
+   326                        
+   327 01:0000:                              ends
+   328                        
+   329                                        end
 
 
-      Lines assembled: 544
+      Lines assembled: 536
       Errors: 0

@@ -67,7 +67,6 @@ DSTACK          ds      DSTACK_SIZE
                 code
                 public  Start
 Start:
-
                 native
                 long_ai
                 ldx     #$01ff
@@ -470,7 +469,7 @@ EMIT:
                 HEADER  3,"KEY",NORMAL,EMIT
                 extern  UartRx
 KEY:
-                jsr     UartTx
+                jsr     UartRx
                 and     #$00ff
                 dex
                 dex

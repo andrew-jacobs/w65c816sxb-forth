@@ -7,7 +7,21 @@
 ;
 ; Western Design Center W65C816 device definitions                                          
 ;------------------------------------------------------------------------------
-
+; Copyright (C)2015 HandCoded Software Ltd.
+; All rights reserved.
+;
+; This work is made available under the terms of the Creative Commons
+; Attribution-NonCommercial-ShareAlike 4.0 International license. Open the
+; following URL to see the details.
+;
+; http://creativecommons.org/licenses/by-nc-sa/4.0/
+;
+;==============================================================================
+; Notes:
+;
+; Various macros and definitions for the W65C816 microprocessor.
+;
+;------------------------------------------------------------------------------
 
 ;==============================================================================
 ; Status Register Bits
@@ -27,16 +41,16 @@ C_FLAG          equ     0
 ; Macros
 ;------------------------------------------------------------------------------
 
-; Puts the processor in emulation mode. A, X and Y become 8-bits and the stack
-; is fixed at $0100-$01ff. 
+; Puts the processor into emulation mode. A, X and Y become 8-bits and the
+; stack is fixed at $0100-$01ff. 
 
 emulate         macro
                 sec
                 xce
                 endm
 
-; Puts the processor in native mode. The size of the memory and index register
-; operations is not controlled by the M & X bits in the status register.
+; Puts the processor into native mode. The size of the memory and index
+; register operations is controlled by the M & X bits in the status register.
 
 native          macro
                 clc
@@ -73,11 +87,16 @@ short_a         macro
                 longa   off
                 endm
 
+; Sets the X bit making the index registers 8-bits wide
+
 short_i         macro
                 sep     #(1<<X_FLAG)
                 longi   off
                 endm
                 
+; Sets the M and X bits making the accumator, memory accesses and index
+; registers 8-bits wide.
+
 short_ai        macro
                 sep     #(1<<M_FLAG)|(1<<X_FLAG)
                 longa   off
