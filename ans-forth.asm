@@ -52,6 +52,8 @@ NORMAL          equ     0
 IMMEDIATE       equ     1
 
 DSTACK_SIZE     equ     128
+DSTACK_INIT     equ     DSTACK+DSTACK_SIZE-1
+RSTACK_INIT     equ     $01ff
 
 ;==============================================================================
 ; Data Areas
@@ -64,53 +66,133 @@ WA              ds      2
 
 DSTACK          ds      DSTACK_SIZE
 
+                data
+		org	$210
+
+USER_AREA       ds      20
+
+TIB_AREA        ds      128
+
+
+;==============================================================================
+;------------------------------------------------------------------------------
+
                 code
                 public  Start
 Start:
-                native
-                long_ai
-                ldx     #$01ff
-                txs
-                ldx     #DSTACK+DSTACK_SIZE-1
+                native                          ; Go to native mode
+                long_ai                         ; And all 16-bit registers
+                lda     #RSTACK_INIT
+                tcs
+                ldx     #DSTACK_INIT
 
-                ldy     #TEST
+                ldy     #COLD
                 jmp     NEXT
 
-TEST:
-                dw      BL
-                dw      EMIT
-                dw      BRANCH
-                dw      TEST
+COLD:
+                dw      DO_S_QUOTE
+                db      35,"HandCoded W65C816 ANS-Forth [15.08]"
+                dw      TYPE
+                dw      ABORT
 
 ;==============================================================================
 ; System/User Variables
 ;------------------------------------------------------------------------------
 
+;
+                HEADER  4,"#TIB",NORMAL,0
+HASH_TIB:       jmp     DO_CONSTANT
+                dw      $+2
+                dw      80
+
+                HEADER  3,">IN",NORMAL,0
+TO_IN:
+
+
+                HEADER  4,"BASE",NORMAL,0
+BASE:           jmp     DO_USER
+                dw      0
+
+                HEADER  3,"BLK",NORMAL,0
+BLK:
+
+                HEADER  3,"SCR",NORMAL,0
+SCR:
+
+; SOURCE ( -- c-addr u )
+;
+; c-addr is the address of, and u is the number of characters in, the input
+; buffer.
+;
+; In this implementation it is defined as
+;
+;   TIB #TIB @
+
+                HEADER  6,"SOURCE",NORMAL,0
+SOURCE:         jmp     DO_COLON
+                dw      TIB
+                dw      HASH_TIB,FETCH
+                dw      EXIT
+
+                HEADER  9,"SOURCE-ID",NORMAL,0
+SOURCE_ID:
+
+                HEADER  5,"STATE",NORMAL,0
+STATE:          jmp     DO_USER
+                dw      0
+
+                HEADER  3,"TIB",NORMAL,0
+TIB:
 
 ;==============================================================================
 ;------------------------------------------------------------------------------
 
+QUERY_BRANCH:
+                lda     DSTACK+1,x              ; Pull the top of stack value
+                php                             ; Save the flags
+                inx                             ; Drop top item
+                inx
+                plp
+                beq     BRANCH                  ; Branch if top was zero
+                iny                             ; Otherwise skip address
+                iny
+                jmp     NEXT                    ; Done
 
 BRANCH:
-                lda     0,y
+                lda     0,y                     ; Load brancg address into IP
                 tay
-                jmp     NEXT
+                jmp     NEXT                    ; Done
 
 ;==============================================================================
 ; Constants
 ;------------------------------------------------------------------------------
 
-; BL
+; 0 ( -- 0 )
+;
+; Push the constant value zero on the stack
 
-                HEADER  2,"BL",NORMAL,0
+                HEADER  1,"0",NORMAL,0
+ZERO:
+                dex                             ; Make space on the stack
+                dex
+                stz     DSTACK+1,X              ; And create a zero value
+                jmp     NEXT                    ; Done
+
+; BL ( -- char )
+;
+; char is the character value for a space.
+
+                HEADER  2,"BL",NORMAL,ZERO
 BL:
+                dex                             ; Make space on the stack
                 dex
-                dex
-                lda     #'.'
+                lda     #' '                    ; And save a space value
                 sta     DSTACK+1,x
-                jmp     NEXT
+                jmp     NEXT                    ; Done
 
 ; FALSE ( -- false )
+;
+; Return a false flag.
 
                 HEADER  5,"FALSE",NORMAL,BL
 FALSE:
@@ -120,6 +202,8 @@ FALSE:
                 jmp     NEXT                    ; Done
 
 ; TRUE ( -- true )
+;
+; Return a true flag, a single-cell value with all bits set.
 
                 HEADER  4,"TRUE",NORMAL,FALSE
 TRUE:
@@ -251,6 +335,17 @@ TWO_DROP:
 
 ; 2OVER
 
+; ?DUP
+
+		HEADER	4,"?DUP",NORMAL,0
+QUERY_DUP:
+		lda	DSTACK+1,x
+		beq	QUERY_DUP_1
+		dex
+		dex
+		sta	DSTACK+1,x
+QUERY_DUP_1:	jmp	NEXT
+
 ; DROP ( x -- )
 ;
 ; Remove x from the stack.
@@ -287,13 +382,13 @@ OVER:
 
                 HEADER  4,"SWAP",NORMAL,OVER
 SWAP:
-                lda     DSTACK+1,x
-                pha
-                lda     DSTACK+3,x
-                sta     DSTACK+1,x
-                pla
-                sta     DSTACK+3,x
-                jmp     NEXT
+                lda     DSTACK+1,x		; Fetch top of stack
+                pha				; .. and save
+                lda     DSTACK+3,x		; Exchange second
+                sta     DSTACK+1,x		; .. and top
+                pla				; Recover top
+                sta     DSTACK+3,x		; .. and save as second
+                jmp     NEXT			; Done
 
 ;==============================================================================
 ; Return Stack Operations
@@ -307,7 +402,24 @@ TO_R:
                 inx
                 jmp     NEXT                    ; Done
 
-                HEADER 2,"R>",NORMAL,TO_R
+                HEADER  1,"I",NORMAL,0
+I:
+                lda     1,s
+                dex
+                dex
+                sta     DSTACK+1,x
+                jmp     NEXT
+
+                HEADER  1,"J",NORMAL,0
+J:
+                lda     3,s
+                dex
+                dex
+                sta     DSTACK+1,x
+                jmp     NEXT
+
+
+                HEADER  2,"R>",NORMAL,TO_R
 R_FROM:
                 pla                             ; Fetch return stack value
                 dex                             ; And push
@@ -356,7 +468,15 @@ ONE_PLUS:
                 inc     DSTACK+1,x
                 jmp     NEXT                    ; Done
 
-; NEGATE
+
+                HEADER  2,"1-",NORMAL,ONE_PLUS
+ONE_MINUS:
+                dec     DSTACK+1,x
+                jmp     NEXT
+
+; NEGATE ( n1 -- n2 )
+;
+; Negate n1, giving its arithmetic inverse n2.
 
                 HEADER  6,"NEGATE",NORMAL,ONE_PLUS
 NEGATE:
@@ -374,11 +494,50 @@ NEGATE:
 ; Comparisons
 ;------------------------------------------------------------------------------
 
+; 0< ( n -- flag )
+;
+; flag is true if and only if n is less than zero.
+
+                HEADER  2,"0<",NORMAL,0
+ZERO_LESS:
+                lda     DSTACK+1,x              ; Test top of stack
+                stz     DSTACK+1,x              ; Assume false result
+                bpl     $+5                     ; Was the value negative?
+                dec     DSTACK+1,x              ; Yes, make true result
+                jmp     NEXT
+
+; 0= ( x -- flag )
+;
+; flag is true if and only if x is equal to zero.
+
+                HEADER  2,"0=",NORMAL,ZERO_LESS
+ZERO_EQUAL:
+                lda     DSTACK+1,x              ; Test top of stack
+                stz     DSTACK+1,x              ; Assume false result
+                bne     $+5                     ; Was the value zero?
+                dec     DSTACK+1,x              ; Yes, make true result
+                jmp     NEXT
+
+; 0> ( n -- flag )
+;
+; flag is true if and only if n is greater than zero.
+
+                HEADER  2,"0>",NORMAL,ZERO_EQUAL
+ZERO_GREATER:
+                lda     DSTACK+1,x              ; Test top of stack
+                stz     DSTACK+1,x              ; Assume false result
+                bmi     $+7                     ; Was the value positive?
+                beq     $+5                     ; .. but not zero
+                dec     DSTACK+1,x              ; Yes, make true result
+                jmp     NEXT
+
 ;==============================================================================
 ; Logical Operations
 ;------------------------------------------------------------------------------
 
 ; AND ( x1 x2 -- x3 )
+;
+; x3 is the bit-by-bit logical “and” of x1 with x2.
 
                 HEADER  3,"AND",NORMAL,NEGATE
 AND:
@@ -420,11 +579,102 @@ XOR:
                 inx
                 jmp     NEXT
 
-;================================================================================
+;==============================================================================
 ; Control Words
-;--------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
 
-                HEADER  1,":",NORMAL,XOR
+; ABORT ( i*x -- ) ( R: j*x -- )
+;
+; Empty the data stack and perform the function of QUIT, which includes
+; emptying the return stack, without displaying a message.
+
+                HEADER  5,"ABORT",NORMAL,COLON
+ABORT:          jmp     DO_COLON
+                dw      DO_ABORT
+                dw      QUIT
+
+DO_ABORT:
+                ldx     #DSTACK_INIT
+                jmp     NEXT
+
+; EXIT ( -- ) ( R: nest-sys -- )
+
+                HEADER  4,"EXIT",NORMAL,ABORT
+EXIT:
+                ply
+                jmp     NEXT
+
+; QUIT ( -- ) ( R: i*x -- )
+;
+; Empty the return stack, store zero in SOURCE-ID if it is present, make the
+; user input device the input source, and enter interpretation state. Do not
+; display a message. Repeat the following:
+; – Accept a line from the input source into the input buffer, set >IN to zero,
+;   and interpret.
+; – Display the implementation-defined system prompt if in interpretation state,
+;   all processing has been completed, and no ambiguous condition exists.
+;
+; In this implementation it is defined as:
+;
+;   DO_QUIT 0 STATE !
+;   BEGIN
+;       REFILL
+;       WHILE SOURCE EVALUATE
+;       STATE @ 0= IF CR S" OK" THEN
+;   AGAIN ;
+
+                HEADER  4,"QUIT",NORMAL,EXIT
+QUIT:           jmp     DO_COLON
+                dw      DO_QUIT
+                dw      ZERO,STATE,STORE
+
+
+DO_QUIT:
+                lda     #RSTACK_INIT            ; Reset the return stack
+                tcs
+                jmp     NEXT                    ; Done
+
+;==============================================================================
+; Compiling Words
+;------------------------------------------------------------------------------
+
+                HEADER  10,"(CONSTANT)",NORMAL,0
+DO_CONSTANT:
+
+                HEADER  4,"(DO)",NORMAL,0
+DO_DO:
+                lda     DSTACK+3,x
+                pha
+                lda     DSTACK+1,x
+                pha
+                inx
+                inx
+                inx
+                inx
+                jmp     NEXT
+
+                HEADER  10,"(LITERAL)",NORMAL,0
+DO_LITERAL:
+
+                HEADER  6,"(LOOP)",NORMAL,0
+DO_LOOP
+                lda     1,s                     ; Add one to loop counter
+                inc	a
+		sta	1,s
+                cmp     3,s
+		
+		jmp	NEXT
+
+                HEADER  10,"(USER)",NORMAL,0
+DO_USER:
+
+                HEADER  10,"(VARIABLE)",NORMAL,0
+DO_VARIABLE:
+
+
+; : ()
+
+                HEADER  1,":",IMMEDIATE,0
 COLON:
 
 
@@ -442,39 +692,138 @@ NEXT:
                 jmp     (!WA)                   ; And execute word
 
 
-; EXIT ( -- ) ( R: nest-sys -- )
+                HEADER  8,"CONSTANT",IMMEDIATE,0
+CONSTANT:
 
-                HEADER 4,"EXIT",NORMAL,COLON
-EXIT:
-                ply
-                ply
-                jmp     NEXT
 
-;================================================================================
-;--------------------------------------------------------------------------------
 
-; EMIT
+                HEADER  2,"IF",IMMEDIATE,0
+IF:
 
-                HEADER  4,"EMIT",NORMAL,EXIT
+
+
+                HEADER  2,"S""",IMMEDIATE,0
+S_QUOTE:
+
+; (S") ( -- c-addr u )
+
+DO_S_QUOTE:
+                dex                             ; Reserve space for values
+                dex
+                dex
+                dex
+                short_a
+                lda     0,y                     ; Fetch the length
+                long_a
+                and     #$00ff
+                sta     DSTACK+1,x
+                iny                             ; Save the text address
+                sty     DSTACK+3,x
+                clc                             ; And update IP
+                adc     DSTACK+3,X
+                tay
+                jmp     NEXT                    ; Done
+
+;==============================================================================
+; I/O Operations
+;------------------------------------------------------------------------------
+
+; CR ( -- )
+;
+; Cause subsequent output to appear at the beginning of the next line.
+;
+; In this implementation it is defined as
+;
+;   13 EMIT 10 EMIT
+
+                HEADER  2,"CR",NORMAL,0
+CR:             jmp     DO_COLON
+                dw      DO_LITERAL,13,EMIT
+                dw      DO_LITERAL,10,EMIT
+                dw      EXIT
+
+; EMIT ( x -- )
+;
+; If x is a graphic character in the implementation-defined character set,
+; display x. The effect of EMIT for all other values of x is implementation
+; -defined.
+
+                HEADER  4,"EMIT",NORMAL,CR
                 extern  UartTx
 EMIT:
-                lda     DSTACK+1,X
-                jsr     UartTx
+                lda     DSTACK+1,X              ; Fetch character from stack
+                jsr     UartTx                  ; .. and transmit
+                inx                             ; Drop the character
                 inx
-                inx
-                jmp     NEXT
+                jmp     NEXT                    ; Done
 
-; KEY
+; KEY ( -- char )
+;
+; Receive one character char, a member of the implementation-defined character
+; set. Keyboard events that do not correspond to such characters are discarded
+; until a valid character is received, and those events are subsequently
+; unavailable.
+;
+; All standard characters can be received. Characters received by KEY are not
+; displayed.
 
                 HEADER  3,"KEY",NORMAL,EMIT
                 extern  UartRx
 KEY:
-                jsr     UartRx
-                and     #$00ff
-                dex
+                jsr     UartRx                  ; Receive a character
+                and     #$00ff                  ; Ensure in ASCII range
+                dex                             ; And push to stack
                 dex
                 sta     DSTACK+1,x
-                jmp     NEXT
+                jmp     NEXT                    ; Done
+
+; SPACE ( -- )
+;
+; Display one space.
+;
+; In this implementation it is defined as
+;
+;   SPACE EMIT
+
+                HEADER  5,"SPACE",NORMAL,KEY
+SPACE:          jmp     DO_COLON
+                dw      BL
+                dw      EMIT
+                dw      EXIT
+
+; SPACES ( n -- )
+;
+; If n is greater than zero, display n spaces.
+;
+; In this implementation it is defined as
+;
+;   BEGIN DUP 0> WHILE SPACE 1- REPEAT DROP
+
+                HEADER  6,"SPACES",NORMAL,SPACE
+SPACES:         jmp     DO_COLON
+SPACES_1:       dw      DUP,ZERO_GREATER,QUERY_BRANCH,SPACES_2
+                dw      SPACE,ONE_MINUS,BRANCH,SPACES_1
+SPACES_2:       dw      DROP,EXIT
+
+; TYPE ( c-addr u -- )
+;
+; If u is greater than zero, display the character string specified by c-addr
+; and u.
+;
+; In this implementation it is defined as
+;
+;   ?DUP IF
+;     OVER + SWAP DO I C@ EMIT LOOP
+;   ELSE DROP THEN
+
+                HEADER  4,"TYPE",NORMAL,SPACES
+TYPE:           jmp     DO_COLON
+                dw      QUERY_DUP,QUERY_BRANCH,TYPE_2
+                dw      OVER,PLUS,SWAP,DO_DO
+TYPE_1:         dw      I,C_FETCH,EMIT,DO_LOOP,TYPE_1
+                dw      BRANCH,TYPE_3
+TYPE_2          dw      DROP
+TYPE_3          dw      EXIT
 
 ;================================================================================
 ;--------------------------------------------------------------------------------

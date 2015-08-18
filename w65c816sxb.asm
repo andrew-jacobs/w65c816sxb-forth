@@ -59,7 +59,7 @@ TMR_COUNT       equ     OSC_FREQ/TIMER_HZ-2
                 messg   "TMR_COUNT does not fit in 16-bits"
                 endif
 
-TXD_COUNT       equ     OSC_FREQ/(BAUD_RATE/12)
+TXD_COUNT       equ     OSC_FREQ/(BAUD_RATE/11)
 
                 if      TXD_DELAY&$ffff0000
                 messg   "TXD_DELAY does not fit in 16-bits"
@@ -116,10 +116,6 @@ RESET:
                 lda     VIA2_IER                ; Disable active interrupts
                 sta     VIA2_IER
                 cli
-loop:
-                jsr     UartRx
-                jsr     UartTx
-                bra     loop
 
                 jmp     Start                   ; Jump to the application start
 
@@ -150,11 +146,13 @@ NMIRQ:
 IRQ:
                 pha                             ; Save callers registers
                 phx
+                phy
                 php                             ; Save current MX bits
                 short_ai                        ; Make registers 8-bit
                 jsr     Service                 ; Service the hardware
                 plp                             ; Restore register widths
-                plx                             ; .. and values
+                ply                             ; .. and values
+                plx
                 pla
                 rti                             ; Done
 
@@ -189,7 +187,7 @@ Service:
 ACIAHandled:
 
 ;------------------------------------------------------------------------------
- 
+
                 lda     VIA1_IFR                ; Is VIA1 the source?
                 bpl     VIA1Handled             ; No.
 
