@@ -1,4 +1,4 @@
-  Tue Aug 18 2015  0:45                                                                                                    Page 1
+  Wed Aug 19 2015 17:12                                                                                                    Page 1
 
 
                                                ***************************************
@@ -59,7 +59,7 @@
     10                        ; Copyright (C)2015 HandCoded Software Ltd.
     11                        ; All rights reserved.
     12                        ;
-  Tue Aug 18 2015  0:45                                                                                                    Page 2
+  Wed Aug 19 2015 17:12                                                                                                    Page 2
 
 
     13                        ; This work is made available under the terms of the Creative Commons
@@ -120,7 +120,7 @@
     68                        
     69                        long_i          macro
     70                                        rep     #(1<<X_FLAG)
-  Tue Aug 18 2015  0:45                                                                                                    Page 3
+  Wed Aug 19 2015 17:12                                                                                                    Page 3
 
 
     71                                        longi   on
@@ -162,1042 +162,1591 @@
     43                        ; Macros
     44                        ;------------------------------------------------------------------------------
     45                        
-    46                        HEADER          macro   LEN,NAME,TYPE,LAST
-    47                                        dw      LAST
-    48                                        db      LEN,NAME,TYPE
-    49                                        endm
-    50                        
-    51             00000000   NORMAL          equ     0
-    52             00000001   IMMEDIATE       equ     1
-    53                        
-    54             00000080   DSTACK_SIZE     equ     128
-    55             00000081   DSTACK_INIT     equ     DSTACK+DSTACK_SIZE-1
-    56             000001FF   RSTACK_INIT     equ     $01ff
-    57                        
-    58                        ;==============================================================================
-    59                        ; Data Areas
-    60                        ;------------------------------------------------------------------------------
-    61                        
-    62                                        page0
-    63                                        org     $00
-    64                        
-  Tue Aug 18 2015  0:45                                                                                                    Page 4
+    46             00000000   COUNT           set     0
+    47             00000000   WORD0           equ     0
+    48                        
+    49                        HEADER          macro   LEN,NAME,TYPE
+    50                        WORD@<COUNT+1>:
+    51                                        dw      WORD@<COUNT>
+    52                                        db      TYPE,LEN,NAME
+    53                        COUNT           set     COUNT+1
+    54                                        endm
+    55                        
+    56             00000000   NORMAL          equ     $00
+    57             00000080   IMMEDIATE       equ     $80
+    58                        
+    59                        ;==============================================================================
+    60                        ; Definitions
+    61                        ;------------------------------------------------------------------------------
+    62                        
+    63             00000080   DSTACK_SIZE     equ     128
+    64             00000081   DSTACK_INIT     equ     DSTACK+DSTACK_SIZE-1
+  Wed Aug 19 2015 17:12                                                                                                    Page 4
 
 
-    65 00:0000:              WA              ds      2
+    65             000001FF   RSTACK_INIT     equ     $01ff
     66                        
-    67 00:0002:              DSTACK          ds      DSTACK_SIZE
+    67             00000014   USER_SIZE       equ     20
     68                        
-    69                                        data
-    70                        		org	$210
-    71                        
-    72 00:0210:              USER_AREA       ds      20
-    73                        
-    74 00:0224:              TIB_AREA        ds      128
-    75                        
-    76                        
-    77                        ;==============================================================================
-    78                        ;------------------------------------------------------------------------------
+    69             00000000   TO_IN_OFFSET    equ     0
+    70             00000002   BASE_OFFSET     equ     2
+    71             00000004   BLK_OFFSET      equ     4
+    72             00000006   DP_OFFSET       equ     6
+    73             00000008   LATEST_OFFSET   equ     8
+    74             0000000A   SCR_OFFSET      equ     10
+    75             0000000C   SOURCEID_OFFSET equ     12
+    76             0000000E   STATE_OFFSET    equ     14
+    77                        
+    78             00000080   TIB_SIZE        equ     128
     79                        
-    80                                        code
-    81                                        public  Start
-    82                        Start:
-    83                                        native                          ; Go to native mode
-+   83 00:0000: 18                           clc
-+   83 00:0001: FB                           xce
-    84                                        long_ai                         ; And all 16-bit registers
-+   84 00:0002: C2 30                        rep     #(1<<M_FLAG)|(1<<X_FLAG)
-+   84                                        longa   on
-+   84                                        longi   on
-    85 00:0004: A9 FF 01                     lda     #RSTACK_INIT
-    86 00:0007: 1B                           tcs
-    87 00:0008: A2 81 00                     ldx     #DSTACK_INIT
+    80                        ;==============================================================================
+    81                        ; Data Areas
+    82                        ;------------------------------------------------------------------------------
+    83                        
+    84                                        page0
+    85                                        org     $00
+    86                        
+    87 00:0000:              WA              ds      2                       ; Word address
     88                        
-    89 00:000B: A0 xx xx                     ldy     #COLD
-    90 00:000E: 4C xx xx                     jmp     NEXT
-    91                        
-    92                        COLD:
-    93 00:0011: xx xx                        dw      DO_S_QUOTE
-    94 00:0013: 23 48 61 6E                  db      35,"HandCoded W65C816 ANS-Forth [15.08]"
-       00:0017: 64 43 6F 64 
-       00:001B: 65 64 20 57 
-       00:001F: 36 35 43 38 
-       00:0023: 31 36 20 41 
-       00:0027: 4E 53 2D 46 
-       00:002B: 6F 72 74 68 
-       00:002F: 20 5B 31 35 
-       00:0033: 2E 30 38 5D 
-    95 00:0037: xx xx                        dw      TYPE
-    96 00:0039: xx xx                        dw      ABORT
+    89 00:0002:              DSTACK          ds      DSTACK_SIZE             ; The data stack (indexed by X)
+    90                        
+    91                                        data
+    92                                        org     $210
+    93                        
+    94 00:0210:              USER_AREA       ds      USER_SIZE               ; User Variables
+    95                        
+    96 00:0224:              TIB_AREA        ds      TIB_SIZE                ; Terminal Input Buffer
     97                        
     98                        ;==============================================================================
-    99                        ; System/User Variables
+    99                        ; Forth Entry Point
    100                        ;------------------------------------------------------------------------------
    101                        
-   102                        ;
-   103                                        HEADER  4,"#TIB",NORMAL,0
-+  103 00:003B: 00 00                        dw      0
-+  103 00:003D: 04 23 54 49                  db      4,"#TIB",NORMAL
-       00:0041: 42 00 
-   104 00:0043: 4C xx xx     HASH_TIB:       jmp     DO_CONSTANT
-   105 00:0046: xx xx                        dw      $+2
-   106 00:0048: 50 00                        dw      80
-  Tue Aug 18 2015  0:45                                                                                                    Page 5
-
-
-   107                        
-   108                                        HEADER  3,">IN",NORMAL,0
-+  108 00:004A: 00 00                        dw      0
-+  108 00:004C: 03 3E 49 4E                  db      3,">IN",NORMAL
-       00:0050: 00 
-   109                        TO_IN:
+   102                                        code
+   103                                        public  Start
+   104                        Start:
+   105                                        native                          ; Go to native mode
++  105 00:0000: 18                           clc
++  105 00:0001: FB                           xce
+   106                                        long_ai                         ; And all 16-bit registers
++  106 00:0002: C2 30                        rep     #(1<<M_FLAG)|(1<<X_FLAG)
++  106                                        longa   on
++  106                                        longi   on
+   107 00:0004: A9 FF 01                     lda     #RSTACK_INIT            ; Initialise return stack
+   108 00:0007: 1B                           tcs
+   109 00:0008: A2 81 00                     ldx     #DSTACK_INIT            ; .. and data stack
    110                        
-   111                        
-   112                                        HEADER  4,"BASE",NORMAL,0
-+  112 00:0051: 00 00                        dw      0
-+  112 00:0053: 04 42 41 53                  db      4,"BASE",NORMAL
-       00:0057: 45 00 
-   113 00:0059: 4C xx xx     BASE:           jmp     DO_USER
-   114 00:005C: 00 00                        dw      0
-   115                        
-   116                                        HEADER  3,"BLK",NORMAL,0
-+  116 00:005E: 00 00                        dw      0
-+  116 00:0060: 03 42 4C 4B                  db      3,"BLK",NORMAL
-       00:0064: 00 
-   117                        BLK:
-   118                        
-   119                                        HEADER  3,"SCR",NORMAL,0
-+  119 00:0065: 00 00                        dw      0
-+  119 00:0067: 03 53 43 52                  db      3,"SCR",NORMAL
-       00:006B: 00 
-   120                        SCR:
-   121                        
-   122                        ; SOURCE ( -- c-addr u )
-   123                        ;
-   124                        ; c-addr is the address of, and u is the number of characters in, the input
-   125                        ; buffer.
-   126                        ;
-   127                        ; In this implementation it is defined as
+   111 00:000B: A0 xx xx                     ldy     #COLD                   ; Then perform COLD start
+   112 00:000E: 4C xx xx                     jmp     NEXT
+   113                        
+   114                        COLD:
+   115 00:0011: xx xx                        dw      DECIMAL
+   116 00:0013: xx xx xx xx                  dw      ZERO,BLK,STORE
+       00:0017: xx xx 
+  Wed Aug 19 2015 17:12                                                                                                    Page 5
+
+
+   117 00:0019: xx xx xx xx                  dw      FALSE,STATE,STORE
+       00:001D: xx xx 
+   118 00:001F: xx xx                        dw      DO_S_QUOTE
+   119 00:0021: 23 48 61 6E                  db      35,"HandCoded W65C816 ANS-Forth [15.08]"
+       00:0025: 64 43 6F 64 
+       00:0029: 65 64 20 57 
+       00:002D: 36 35 43 38 
+       00:0031: 31 36 20 41 
+       00:0035: 4E 53 2D 46 
+       00:0039: 6F 72 74 68 
+       00:003D: 20 5B 31 35 
+       00:0041: 2E 30 38 5D 
+   120 00:0045: xx xx                        dw      TYPE
+   121 00:0047: xx xx                        dw      ABORT
+   122                        
+   123                        ;==============================================================================
+   124                        ; System/User Variables
+   125                        ;------------------------------------------------------------------------------
+   126                        
+   127                        ; #TIB ( -- a-addr )
    128                        ;
-   129                        ;   TIB #TIB @
-   130                        
-   131                                        HEADER  6,"SOURCE",NORMAL,0
-+  131 00:006C: 00 00                        dw      0
-+  131 00:006E: 06 53 4F 55                  db      6,"SOURCE",NORMAL
-       00:0072: 52 43 45 00 
-   132 00:0076: 4C xx xx     SOURCE:         jmp     DO_COLON
-   133 00:0079: xx xx                        dw      TIB
-   134 00:007B: xx xx xx xx                  dw      HASH_TIB,FETCH
-   135 00:007F: xx xx                        dw      EXIT
+   129                        ; a-addr is the address of a cell containing the number of characters in the
+   130                        ; terminal input buffer.
+   131                        
+   132                                        HEADER  4,"#TIB",NORMAL
++  132                        WORD1:
++  132 00:0049: 00 00                        dw      WORD0
++  132 00:004B: 00 04 23 54                  db      NORMAL,4,"#TIB"
+       00:004F: 49 42 
++  132             00000001   COUNT           set     COUNT+1
+   133 00:0051: 4C xx xx     HASH_TIB:       jmp     DO_CONSTANT
+   134 00:0054: xx xx                        dw      $+2
+   135 00:0056: 7E 00                        dw      TIB_SIZE-2
    136                        
-   137                                        HEADER  9,"SOURCE-ID",NORMAL,0
-+  137 00:0081: 00 00                        dw      0
-+  137 00:0083: 09 53 4F 55                  db      9,"SOURCE-ID",NORMAL
-       00:0087: 52 43 45 2D 
-       00:008B: 49 44 00 
-   138                        SOURCE_ID:
-   139                        
-   140                                        HEADER  5,"STATE",NORMAL,0
-+  140 00:008E: 00 00                        dw      0
-+  140 00:0090: 05 53 54 41                  db      5,"STATE",NORMAL
-       00:0094: 54 45 00 
-   141 00:0097: 4C xx xx     STATE:          jmp     DO_USER
-   142 00:009A: 00 00                        dw      0
-  Tue Aug 18 2015  0:45                                                                                                    Page 6
+   137                        ; >IN ( -- a-addr )
+   138                        ;
+   139                        ; a-addr is the address of a cell containing the offset in characters from the
+   140                        ; start of the input buffer to the start of the parse area.
+   141                        
+   142                                        HEADER  3,">IN",NORMAL
++  142                        WORD2:
++  142 00:0058: xx xx                        dw      WORD1
++  142 00:005A: 00 03 3E 49                  db      NORMAL,3,">IN"
+       00:005E: 4E 
++  142             00000002   COUNT           set     COUNT+1
+   143 00:005F: 4C xx xx     TO_IN:          jmp     DO_USER
+   144 00:0062: 00 00                        dw      TO_IN_OFFSET
+   145                        
+   146                        ; BASE ( -- a-addr )
+   147                        ;
+   148                        ; a-addr is the address of a cell containing the current number-conversion
+   149                        ; radix {{2...36}}.
+   150                        
+   151                                        HEADER  4,"BASE",NORMAL
++  151                        WORD3:
++  151 00:0064: xx xx                        dw      WORD2
++  151 00:0066: 00 04 42 41                  db      NORMAL,4,"BASE"
+       00:006A: 53 45 
+  Wed Aug 19 2015 17:12                                                                                                    Page 6
 
 
-   143                        
-   144                                        HEADER  3,"TIB",NORMAL,0
-+  144 00:009C: 00 00                        dw      0
-+  144 00:009E: 03 54 49 42                  db      3,"TIB",NORMAL
-       00:00A2: 00 
-   145                        TIB:
-   146                        
-   147                        ;==============================================================================
-   148                        ;------------------------------------------------------------------------------
-   149                        
-   150                        QUERY_BRANCH:
-   151 00:00A3: B5 03                        lda     DSTACK+1,x              ; Pull the top of stack value
-   152 00:00A5: 08                           php                             ; Save the flags
-   153 00:00A6: E8                           inx                             ; Drop top item
-   154 00:00A7: E8                           inx
-   155 00:00A8: 28                           plp
-   156 00:00A9: F0 05                        beq     BRANCH                  ; Branch if top was zero
-   157 00:00AB: C8                           iny                             ; Otherwise skip address
-   158 00:00AC: C8                           iny
-   159 00:00AD: 4C xx xx                     jmp     NEXT                    ; Done
-   160                        
-   161                        BRANCH:
-   162 00:00B0: B9 00 00                     lda     0,y                     ; Load brancg address into IP
-   163 00:00B3: A8                           tay
-   164 00:00B4: 4C xx xx                     jmp     NEXT                    ; Done
++  151             00000003   COUNT           set     COUNT+1
+   152 00:006C: 4C xx xx     BASE:           jmp     DO_USER
+   153 00:006F: 02 00                        dw      BASE_OFFSET
+   154                        
+   155                        ; BLK ( -- a-addr )
+   156                        ;
+   157                        ; a-addr is the address of a cell containing zero or the number of the mass-
+   158                        ; storage block being interpreted. If BLK contains zero, the input source is
+   159                        ; not a block and can be identified by SOURCE-ID, if SOURCE-ID is available. An
+   160                        ; ambiguous condition exists if a program directly alters the contents of BLK.
+   161                        
+   162                                        HEADER  3,"BLK",NORMAL
++  162                        WORD4:
++  162 00:0071: xx xx                        dw      WORD3
++  162 00:0073: 00 03 42 4C                  db      NORMAL,3,"BLK"
+       00:0077: 4B 
++  162             00000004   COUNT           set     COUNT+1
+   163 00:0078: 4C xx xx     BLK:            jmp     DO_USER
+   164 00:007B: 04 00                        dw      BLK_OFFSET
    165                        
-   166                        ;==============================================================================
-   167                        ; Constants
-   168                        ;------------------------------------------------------------------------------
-   169                        
-   170                        ; 0 ( -- 0 )
-   171                        ;
-   172                        ; Push the constant value zero on the stack
-   173                        
-   174                                        HEADER  1,"0",NORMAL,0
-+  174 00:00B7: 00 00                        dw      0
-+  174 00:00B9: 01 30 00                     db      1,"0",NORMAL
-   175                        ZERO:
-   176 00:00BC: CA                           dex                             ; Make space on the stack
-   177 00:00BD: CA                           dex
-   178 00:00BE: 74 03                        stz     DSTACK+1,X              ; And create a zero value
-   179 00:00C0: 4C xx xx                     jmp     NEXT                    ; Done
+   166                        ; DP ( -- a-addr )
+   167                        
+   168                                        HEADER  2,"DP",NORMAL
++  168                        WORD5:
++  168 00:007D: xx xx                        dw      WORD4
++  168 00:007F: 00 02 44 50                  db      NORMAL,2,"DP"
++  168             00000005   COUNT           set     COUNT+1
+   169 00:0083: 4C xx xx     DP:             jmp     DO_USER
+   170 00:0086: 06 00                        dw      DP_OFFSET
+   171                        
+   172                        ; SCR ( -- a-addr )
+   173                        ;
+   174                        ; a-addr is the address of a cell containing the block number of the block most
+   175                        ; recently LISTed.
+   176                        
+   177                                        HEADER  3,"SCR",NORMAL
++  177                        WORD6:
++  177 00:0088: xx xx                        dw      WORD5
++  177 00:008A: 00 03 53 43                  db      NORMAL,3,"SCR"
+       00:008E: 52 
++  177             00000006   COUNT           set     COUNT+1
+   178 00:008F: 4C xx xx     SCR:            jmp     DO_USER
+   179 00:0092: 0A 00                        dw      SCR_OFFSET
    180                        
-   181                        ; BL ( -- char )
+   181                        ; SOURCE-ID ( -- 0 | -1 )
    182                        ;
-   183                        ; char is the character value for a space.
-   184                        
-   185                                        HEADER  2,"BL",NORMAL,ZERO
-+  185 00:00C3: xx xx                        dw      ZERO
-+  185 00:00C5: 02 42 4C 00                  db      2,"BL",NORMAL
-   186                        BL:
-   187 00:00C9: CA                           dex                             ; Make space on the stack
-   188 00:00CA: CA                           dex
-   189 00:00CB: A9 20 00                     lda     #' '                    ; And save a space value
-   190 00:00CE: 95 03                        sta     DSTACK+1,x
-   191 00:00D0: 4C xx xx                     jmp     NEXT                    ; Done
-   192                        
-   193                        ; FALSE ( -- false )
-  Tue Aug 18 2015  0:45                                                                                                    Page 7
+   183                        ; Identifies the input source: -1 if string (via EVALUATE), 0 if user input
+   184                        ; device.
+   185                        
+   186                                        HEADER  9,"SOURCE-ID",NORMAL
++  186                        WORD7:
++  186 00:0094: xx xx                        dw      WORD6
++  186 00:0096: 00 09 53 4F                  db      NORMAL,9,"SOURCE-ID"
+       00:009A: 55 52 43 45 
+       00:009E: 2D 49 44 
++  186             00000007   COUNT           set     COUNT+1
+   187 00:00A1: 4C xx xx     SOURCE_ID:      jmp     DO_USER
+   188 00:00A4: 0C 00                        dw      SOURCEID_OFFSET
+  Wed Aug 19 2015 17:12                                                                                                    Page 7
 
 
-   194                        ;
-   195                        ; Return a false flag.
-   196                        
-   197                                        HEADER  5,"FALSE",NORMAL,BL
-+  197 00:00D3: xx xx                        dw      BL
-+  197 00:00D5: 05 46 41 4C                  db      5,"FALSE",NORMAL
-       00:00D9: 53 45 00 
-   198                        FALSE:
-   199 00:00DC: CA                           dex                             ; Make space on the stack
-   200 00:00DD: CA                           dex
-   201 00:00DE: 74 03                        stz     DSTACK+1,X              ; And create a false value
-   202 00:00E0: 4C xx xx                     jmp     NEXT                    ; Done
+   189                        
+   190                        ; STATE ( -- a-addr )
+   191                        ;
+   192                        ; a-addr is the address of a cell containing the compilation-state flag. STATE
+   193                        ; is true when in compilation state, false otherwise. The true value in STATE
+   194                        ; is non-zero, but is otherwise implementation-defined.
+   195                        
+   196                                        HEADER  5,"STATE",NORMAL
++  196                        WORD8:
++  196 00:00A6: xx xx                        dw      WORD7
++  196 00:00A8: 00 05 53 54                  db      NORMAL,5,"STATE"
+       00:00AC: 41 54 45 
++  196             00000008   COUNT           set     COUNT+1
+   197 00:00AF: 4C xx xx     STATE:          jmp     DO_USER
+   198 00:00B2: 0E 00                        dw      STATE_OFFSET
+   199                        
+   200                        ; TIB ( -- c-addr )
+   201                        ;
+   202                        ; c-addr is the address of the terminal input buffer.
    203                        
-   204                        ; TRUE ( -- true )
-   205                        ;
-   206                        ; Return a true flag, a single-cell value with all bits set.
+   204                                        HEADER  3,"TIB",NORMAL
++  204                        WORD9:
++  204 00:00B4: xx xx                        dw      WORD8
++  204 00:00B6: 00 03 54 49                  db      NORMAL,3,"TIB"
+       00:00BA: 42 
++  204             00000009   COUNT           set     COUNT+1
+   205 00:00BB: 4C xx xx     TIB:            jmp     DO_CONSTANT
+   206 00:00BE: 24 02                        dw      TIB_AREA
    207                        
-   208                                        HEADER  4,"TRUE",NORMAL,FALSE
-+  208 00:00E3: xx xx                        dw      FALSE
-+  208 00:00E5: 04 54 52 55                  db      4,"TRUE",NORMAL
-       00:00E9: 45 00 
-   209                        TRUE:
-   210 00:00EB: CA                           dex                             ; Make space on the stack
-   211 00:00EC: CA                           dex
-   212 00:00ED: 74 03                        stz     DSTACK+1,x              ; And create a true value
-   213 00:00EF: D6 03                        dec     DSTACK+1,x
-   214 00:00F1: 4C xx xx                     jmp     NEXT                    ; Done
-   215                        
-   216                        ;==============================================================================
-   217                        ; Memory Operations
-   218                        ;------------------------------------------------------------------------------
-   219                        
-   220                        ; ! ( x a-addr -- )
-   221                        ;
-   222                        ; Store x at a-addr.
-   223                        
-   224                                        HEADER  1,"!",NORMAL,TRUE
-+  224 00:00F4: xx xx                        dw      TRUE
-+  224 00:00F6: 01 21 00                     db      1,"!",NORMAL
-   225                        STORE:
-   226 00:00F9: 5A                           phy
-   227 00:00FA: B4 03                        ldy     DSTACK+1,x              ; Fetch the memory address
-   228 00:00FC: B5 05                        lda     DSTACK+3,x              ; Fetch the data value
-   229 00:00FE: 99 00 00                     sta     0,y                     ; Save it
-   230 00:0101: E8                           inx
-   231 00:0102: E8                           inx
-   232 00:0103: E8                           inx
-   233 00:0104: E8                           inx
-   234 00:0105: 7A                           ply
-   235 00:0106: 4C xx xx                     jmp     NEXT                    ; Done
+   208                        ;==============================================================================
+   209                        ; Branches
+   210                        ;------------------------------------------------------------------------------
+   211                        
+   212                        ; (?BRANCH) ( flag -- )
+   213                        ;
+   214                        ; If flag is false then cause the IP to be loaded with the word following the
+   215                        ; link to this word, otherwise skip over it.
+   216                        
+   217                        QUERY_BRANCH:
+   218 00:00C0: B5 03                        lda     DSTACK+1,x              ; Pull the top of stack value
+   219 00:00C2: 08                           php                             ; Save the flags
+   220 00:00C3: E8                           inx                             ; Drop top item
+   221 00:00C4: E8                           inx
+   222 00:00C5: 28                           plp
+   223 00:00C6: F0 05                        beq     BRANCH                  ; Branch if top was zero
+   224 00:00C8: C8                           iny                             ; Otherwise skip address
+   225 00:00C9: C8                           iny
+   226 00:00CA: 4C xx xx                     jmp     NEXT                    ; Done
+   227                        
+   228                        ; (BRANCH) ( --)
+   229                        ;
+   230                        ; Cause the IP to be loaded with the word following the link to this word.
+   231                        
+   232                        BRANCH:
+   233 00:00CD: B9 00 00                     lda     0,y                     ; Load brancg address into IP
+   234 00:00D0: A8                           tay
+   235 00:00D1: 4C xx xx                     jmp     NEXT                    ; Done
    236                        
-   237                        ; @ ( addr -- x )
-   238                        
-   239                                        HEADER  1,"@",NORMAL,STORE
-+  239 00:0109: xx xx                        dw      STORE
-+  239 00:010B: 01 40 00                     db      1,"@",NORMAL
-   240                        FETCH:
-   241 00:010E: 5A                           phy
-  Tue Aug 18 2015  0:45                                                                                                    Page 8
+  Wed Aug 19 2015 17:12                                                                                                    Page 8
 
 
-   242 00:010F: B4 03                        ldy     DSTACK+1,x              ; Fetch the memory address
-   243 00:0111: B9 00 00                     lda     0,y                     ; Load the actual data
-   244 00:0114: 95 03                        sta     DSTACK+1,x              ; And replace the top value
-   245 00:0116: 7A                           ply
-   246 00:0117: 4C xx xx                     jmp     NEXT                    ; Done
-   247                        
-   248                        ; 2! ( x1 x2 a-addr -- )
-   249                        ;
-   250                        ; Store the cell pair x1 x2 at a-addr, with x2 at a-addr and x1 at the next
-   251                        ; consecutive cell. It is equivalent to the sequence SWAP OVER ! CELL+ !.
-   252                        
-   253                                        HEADER  2,"2!",NORMAL,FETCH
-+  253 00:011A: xx xx                        dw      FETCH
-+  253 00:011C: 02 32 21 00                  db      2,"2!",NORMAL
-   254                        TWO_STORE:
-   255 00:0120: 4C xx xx                     jmp     DO_COLON
-   256 00:0123: xx xx                        dw      SWAP
-   257 00:0125: xx xx                        dw      OVER
-   258 00:0127: xx xx                        dw      STORE
-   259 00:0129: xx xx                        dw      CELL_PLUS
-   260 00:012B: xx xx                        dw      STORE
-   261 00:012D: xx xx                        dw      EXIT
-   262                        
-   263                        ; 2@ ( a-addr -- x1 x2 )
-   264                        ;
-   265                        ; Fetch the cell pair x1 x2 stored at a-addr. x2 is stored at a-addr and x1 at
-   266                        ; the next consecutive cell. It is equivalent to the sequence DUP CELL+ @ SWAP
-   267                        ; @.
-   268                        
-   269                                        HEADER  2,"2@",NORMAL,TWO_STORE
-+  269 00:012F: xx xx                        dw      TWO_STORE
-+  269 00:0131: 02 32 40 00                  db      2,"2@",NORMAL
-   270                        TWO_FETCH:
-   271 00:0135: 4C xx xx                     jmp     DO_COLON
-   272 00:0138: xx xx                        dw      DUP
-   273 00:013A: xx xx                        dw      CELL_PLUS
-   274 00:013C: xx xx                        dw      FETCH
-   275 00:013E: xx xx                        dw      SWAP
-   276 00:0140: xx xx                        dw      FETCH
-   277 00:0142: xx xx                        dw      EXIT
+   237                        ;==============================================================================
+   238                        ; Constants
+   239                        ;------------------------------------------------------------------------------
+   240                        
+   241                        ; 0 ( -- 0 )
+   242                        ;
+   243                        ; Push the constant value zero on the stack
+   244                        
+   245                                        HEADER  1,"0",NORMAL
++  245                        WORD10:
++  245 00:00D4: xx xx                        dw      WORD9
++  245 00:00D6: 00 01 30                     db      NORMAL,1,"0"
++  245             0000000A   COUNT           set     COUNT+1
+   246                        ZERO:
+   247 00:00D9: CA                           dex                             ; Make space on the stack
+   248 00:00DA: CA                           dex
+   249 00:00DB: 74 03                        stz     DSTACK+1,X              ; And create a zero value
+   250 00:00DD: 4C xx xx                     jmp     NEXT                    ; Done
+   251                        
+   252                        ; BL ( -- char )
+   253                        ;
+   254                        ; char is the character value for a space.
+   255                        
+   256                                        HEADER  2,"BL",NORMAL
++  256                        WORD11:
++  256 00:00E0: xx xx                        dw      WORD10
++  256 00:00E2: 00 02 42 4C                  db      NORMAL,2,"BL"
++  256             0000000B   COUNT           set     COUNT+1
+   257                        BL:
+   258 00:00E6: CA                           dex                             ; Make space on the stack
+   259 00:00E7: CA                           dex
+   260 00:00E8: A9 20 00                     lda     #' '                    ; And save a space value
+   261 00:00EB: 95 03                        sta     DSTACK+1,x
+   262 00:00ED: 4C xx xx                     jmp     NEXT                    ; Done
+   263                        
+   264                        ; FALSE ( -- false )
+   265                        ;
+   266                        ; Return a false flag.
+   267                        
+   268                                        HEADER  5,"FALSE",NORMAL
++  268                        WORD12:
++  268 00:00F0: xx xx                        dw      WORD11
++  268 00:00F2: 00 05 46 41                  db      NORMAL,5,"FALSE"
+       00:00F6: 4C 53 45 
++  268             0000000C   COUNT           set     COUNT+1
+   269                        FALSE:
+   270 00:00F9: CA                           dex                             ; Make space on the stack
+   271 00:00FA: CA                           dex
+   272 00:00FB: 74 03                        stz     DSTACK+1,X              ; And create a false value
+   273 00:00FD: 4C xx xx                     jmp     NEXT                    ; Done
+   274                        
+   275                        ; TRUE ( -- true )
+   276                        ;
+   277                        ; Return a true flag, a single-cell value with all bits set.
    278                        
-   279                        ; C! ( x addr -- )
-   280                        
-   281                                        HEADER  2,"C!",NORMAL,TWO_FETCH
-+  281 00:0144: xx xx                        dw      TWO_FETCH
-+  281 00:0146: 02 43 21 00                  db      2,"C!",NORMAL
-   282                        C_STORE:
-   283 00:014A: 5A                           phy
-   284 00:014B: B4 03                        ldy     DSTACK+1,x              ; Fetch the memory address
-   285 00:014D: B5 05                        lda     DSTACK+3,x              ; Fetch the data value
-   286                                        short_a
-+  286 00:014F: E2 20                        sep     #(1<<M_FLAG)
-+  286                                        longa   off
-   287 00:0151: 99 00 00                     sta     0,y                     ; Save it
-   288                                        long_a
-+  288 00:0154: C2 20                        rep     #(1<<M_FLAG)
-+  288                                        longa   on
-   289 00:0156: E8                           inx
-  Tue Aug 18 2015  0:45                                                                                                    Page 9
+   279                                        HEADER  4,"TRUE",NORMAL
++  279                        WORD13:
++  279 00:0100: xx xx                        dw      WORD12
+  Wed Aug 19 2015 17:12                                                                                                    Page 9
 
 
-   290 00:0157: E8                           inx
-   291 00:0158: E8                           inx
-   292 00:0159: E8                           inx
-   293 00:015A: 7A                           ply
-   294 00:015B: 4C xx xx                     jmp     NEXT                    ; Done
-   295                        
-   296                        ; C@ ( addr -- x )
-   297                        
-   298                                        HEADER  2,"C@",NORMAL,C_STORE
-+  298 00:015E: xx xx                        dw      C_STORE
-+  298 00:0160: 02 43 40 00                  db      2,"C@",NORMAL
-   299                        C_FETCH:
-   300 00:0164: 5A                           phy
-   301 00:0165: B4 03                        ldy     DSTACK+1,x              ; Fetch the memory address
-   302                                        short_a
-+  302 00:0167: E2 20                        sep     #(1<<M_FLAG)
-+  302                                        longa   off
-   303 00:0169: B9 00 00                     lda     0,y                     ; Load the actual data
-   304                                        long_a
-+  304 00:016C: C2 20                        rep     #(1<<M_FLAG)
-+  304                                        longa   on
-   305 00:016E: 29 FF 00                     and     #$00ff
-   306 00:0171: 95 03                        sta     DSTACK+1,x              ; And replace the top value
-   307 00:0173: 7A                           ply
-   308 00:0174: 4C xx xx                     jmp     NEXT                    ; Done
-   309                        
-   310                        ; CELL+
-   311                        
-   312                                        HEADER  5,"CELL+",NORMAL,C_FETCH
-+  312 00:0177: xx xx                        dw      C_FETCH
-+  312 00:0179: 05 43 45 4C                  db      5,"CELL+",NORMAL
-       00:017D: 4C 2B 00 
-   313                        CELL_PLUS:
-   314 00:0180: F6 03                        inc     DSTACK+1,x              ; Bump the address by two
-   315 00:0182: F6 03                        inc     DSTACK+1,X
-   316 00:0184: 4C xx xx                     jmp     NEXT
-   317                        
-   318                        ;==============================================================================
-   319                        ; Stack Operations
-   320                        ;------------------------------------------------------------------------------
-   321                        
-   322                        ; 2DROP ( x1 x2 -- )
-   323                        ;
-   324                        ; Drop cell pair x1 x2 from the stack.
-   325                        
-   326                                        HEADER  5,"2DROP",NORMAL,CELL_PLUS
-+  326 00:0187: xx xx                        dw      CELL_PLUS
-+  326 00:0189: 05 32 44 52                  db      5,"2DROP",NORMAL
-       00:018D: 4F 50 00 
-   327                        TWO_DROP:
-   328 00:0190: E8                           inx
-   329 00:0191: E8                           inx
-   330 00:0192: E8                           inx
-   331 00:0193: E8                           inx
-   332 00:0194: 4C xx xx                     jmp     NEXT
++  279 00:0102: 00 04 54 52                  db      NORMAL,4,"TRUE"
+       00:0106: 55 45 
++  279             0000000D   COUNT           set     COUNT+1
+   280                        TRUE:
+   281 00:0108: CA                           dex                             ; Make space on the stack
+   282 00:0109: CA                           dex
+   283 00:010A: 74 03                        stz     DSTACK+1,x              ; And create a true value
+   284 00:010C: D6 03                        dec     DSTACK+1,x
+   285 00:010E: 4C xx xx                     jmp     NEXT                    ; Done
+   286                        
+   287                        ;==============================================================================
+   288                        ; Radix
+   289                        ;------------------------------------------------------------------------------
+   290                        
+   291                        ; DECIMAL ( -- )
+   292                        ;
+   293                        ; Set the numeric conversion radix to ten (decimal).
+   294                        
+   295                                        HEADER  7,"DECIMAL",NORMAL
++  295                        WORD14:
++  295 00:0111: xx xx                        dw      WORD13
++  295 00:0113: 00 07 44 45                  db      NORMAL,7,"DECIMAL"
+       00:0117: 43 49 4D 41 
+       00:011B: 4C 
++  295             0000000E   COUNT           set     COUNT+1
+   296 00:011C: 4C xx xx     DECIMAL:        jmp     DO_COLON
+   297 00:011F: xx xx 0A 00                  dw      DO_LITERAL,10,BASE,STORE
+       00:0123: xx xx xx xx 
+   298 00:0127: xx xx                        dw      EXIT
+   299                        
+   300                        ; HEX ( -- )
+   301                        ;
+   302                        ; Set contents of BASE to sixteen.
+   303                        
+   304                                        HEADER  3,"HEX",NORMAL
++  304                        WORD15:
++  304 00:0129: xx xx                        dw      WORD14
++  304 00:012B: 00 03 48 45                  db      NORMAL,3,"HEX"
+       00:012F: 58 
++  304             0000000F   COUNT           set     COUNT+1
+   305 00:0130: 4C xx xx     HEX:            jmp     DO_COLON
+   306 00:0133: xx xx 10 00                  dw      DO_LITERAL,16,BASE,STORE
+       00:0137: xx xx xx xx 
+   307 00:013B: xx xx                        dw      EXIT
+   308                        
+   309                        ;==============================================================================
+   310                        ; Memory Operations
+   311                        ;------------------------------------------------------------------------------
+   312                        
+   313                        ; ! ( x a-addr -- )
+   314                        ;
+   315                        ; Store x at a-addr.
+   316                        
+   317                                        HEADER  1,"!",NORMAL
++  317                        WORD16:
++  317 00:013D: xx xx                        dw      WORD15
++  317 00:013F: 00 01 21                     db      NORMAL,1,"!"
++  317             00000010   COUNT           set     COUNT+1
+  Wed Aug 19 2015 17:12                                                                                                    Page 10
+
+
+   318                        STORE:
+   319 00:0142: 5A                           phy
+   320 00:0143: B4 03                        ldy     DSTACK+1,x              ; Fetch the memory address
+   321 00:0145: B5 05                        lda     DSTACK+3,x              ; Fetch the data value
+   322 00:0147: 99 00 00                     sta     0,y                     ; Save it
+   323 00:014A: E8                           inx                             ; Clean up data stack
+   324 00:014B: E8                           inx
+   325 00:014C: E8                           inx
+   326 00:014D: E8                           inx
+   327 00:014E: 7A                           ply
+   328 00:014F: 4C xx xx                     jmp     NEXT                    ; Done
+   329                        
+   330                        ; +! ( n|u a-addr -- )
+   331                        ;
+   332                        ; Add n|u to the single-cell number at a-addr.
    333                        
-   334                        ; 2DUP
-   335                        
-  Tue Aug 18 2015  0:45                                                                                                    Page 10
-
-
-   336                        ; 2OVER
-   337                        
-   338                        ; ?DUP
-   339                        
-   340                        		HEADER	4,"?DUP",NORMAL,0
-+  340 00:0197: 00 00                        dw      0
-+  340 00:0199: 04 3F 44 55                  db      4,"?DUP",NORMAL
-       00:019D: 50 00 
-   341                        QUERY_DUP:
-   342 00:019F: B5 03        		lda	DSTACK+1,x
-   343 00:01A1: F0 04        		beq	QUERY_DUP_1
-   344 00:01A3: CA           		dex
-   345 00:01A4: CA           		dex
-   346 00:01A5: 95 03        		sta	DSTACK+1,x
-   347 00:01A7: 4C xx xx     QUERY_DUP_1:	jmp	NEXT
+   334                                        HEADER  2,"+!",NORMAL
++  334                        WORD17:
++  334 00:0152: xx xx                        dw      WORD16
++  334 00:0154: 00 02 2B 21                  db      NORMAL,2,"+!"
++  334             00000011   COUNT           set     COUNT+1
+   335                        PLUS_STORE:
+   336 00:0158: 5A                           phy
+   337 00:0159: B4 03                        ldy     DSTACK+1,x              ; Fetch the memory address
+   338 00:015B: B5 05                        lda     DSTACK+3,x              ; Fetch the data value
+   339 00:015D: 18                           clc                             ; Add data to memory
+   340 00:015E: 79 00 00                     adc     0,y
+   341 00:0161: 99 00 00                     sta     0,y                     ; And save result
+   342 00:0164: E8                           inx                             ; Clean up data stacl
+   343 00:0165: E8                           inx
+   344 00:0166: E8                           inx
+   345 00:0167: E8                           inx
+   346 00:0168: 7A                           ply
+   347 00:0169: 4C xx xx                     jmp     NEXT                    ; Done
    348                        
-   349                        ; DROP ( x -- )
+   349                        ; , ( x -- )
    350                        ;
-   351                        ; Remove x from the stack.
-   352                        
-   353                                        HEADER  4,"DROP",NORMAL,TWO_DROP
-+  353 00:01AA: xx xx                        dw      TWO_DROP
-+  353 00:01AC: 04 44 52 4F                  db      4,"DROP",NORMAL
-       00:01B0: 50 00 
-   354                        DROP:
-   355 00:01B2: E8                           inx                             ; Drop the top value
-   356 00:01B3: E8                           inx
-   357 00:01B4: 4C xx xx                     jmp     NEXT                    ; Done
-   358                        
-   359                        ; DUP ( x -- x x )
-   360                        ;
-   361                        ; Duplicate x.
-   362                        
-   363                                        HEADER  3,"DUP",NORMAL,DROP
-+  363 00:01B7: xx xx                        dw      DROP
-+  363 00:01B9: 03 44 55 50                  db      3,"DUP",NORMAL
-       00:01BD: 00 
-   364                        DUP:
-   365 00:01BE: B5 03                        lda     DSTACK+1,x              ; Fetch top value
-   366 00:01C0: CA                           dex                             ; And make a copy
-   367 00:01C1: CA                           dex
-   368 00:01C2: 95 03                        sta     DSTACK+1,x
-   369 00:01C4: 4C xx xx                     jmp     NEXT                    ; Done
-   370                        
-   371                        ; OVER ( x1 x2 -- x1 x2 x1 )
-   372                        
-   373                                        HEADER  4,"OVER",NORMAL,DUP
-+  373 00:01C7: xx xx                        dw      DUP
-+  373 00:01C9: 04 4F 56 45                  db      4,"OVER",NORMAL
-       00:01CD: 52 00 
-   374                        OVER:
-   375 00:01CF: B5 05                        lda     DSTACK+3,x              ; Fetch second value
-   376 00:01D1: CA                           dex                             ; And make a copy
-   377 00:01D2: CA                           dex
-   378 00:01D3: 95 03                        sta     DSTACK+1,x
-   379 00:01D5: 4C xx xx                     jmp     NEXT                    ; Done
-   380                        
-   381                        ; SWAP ( x1 x2 -- x2 x1 )
-  Tue Aug 18 2015  0:45                                                                                                    Page 11
+   351                        ; Reserve one cell of data space and store x in the cell. If the data-space
+   352                        ; pointer is aligned when , begins execution, it will remain aligned when ,
+   353                        ; finishes execution. An ambiguous condition exists if the data-space pointer
+   354                        ; is not aligned prior to execution of ,.
+   355                        ;
+   356                        ;   HERE ! 1 CELLS ALLOT
+   357                        
+   358                                        HEADER  1,$2c,NORMAL
++  358                        WORD18:
++  358 00:016C: xx xx                        dw      WORD17
++  358 00:016E: 00 01 2C                     db      NORMAL,1,$2c
++  358             00000012   COUNT           set     COUNT+1
+   359 00:0171: 4C xx xx     COMMA:          jmp     DO_COLON
+   360 00:0174: xx xx xx xx                  dw      HERE,STORE
+   361 00:0178: xx xx 01 00                  dw      DO_LITERAL,1,CELLS,ALLOT
+       00:017C: xx xx xx xx 
+   362 00:0180: xx xx                        dw      EXIT
+   363                        
+   364                        ; 2! ( x1 x2 a-addr -- )
+   365                        ;
+   366                        ; Store the cell pair x1 x2 at a-addr, with x2 at a-addr and x1 at the next
+  Wed Aug 19 2015 17:12                                                                                                    Page 11
 
 
-   382                        
-   383                                        HEADER  4,"SWAP",NORMAL,OVER
-+  383 00:01D8: xx xx                        dw      OVER
-+  383 00:01DA: 04 53 57 41                  db      4,"SWAP",NORMAL
-       00:01DE: 50 00 
-   384                        SWAP:
-   385 00:01E0: B5 03                        lda     DSTACK+1,x		; Fetch top of stack
-   386 00:01E2: 48                           pha				; .. and save
-   387 00:01E3: B5 05                        lda     DSTACK+3,x		; Exchange second
-   388 00:01E5: 95 03                        sta     DSTACK+1,x		; .. and top
-   389 00:01E7: 68                           pla				; Recover top
-   390 00:01E8: 95 05                        sta     DSTACK+3,x		; .. and save as second
-   391 00:01EA: 4C xx xx                     jmp     NEXT			; Done
-   392                        
-   393                        ;==============================================================================
-   394                        ; Return Stack Operations
-   395                        ;------------------------------------------------------------------------------
-   396                        
-   397                                        HEADER  2,">R",NORMAL,SWAP
-+  397 00:01ED: xx xx                        dw      SWAP
-+  397 00:01EF: 02 3E 52 00                  db      2,">R",NORMAL
-   398                        TO_R:
-   399 00:01F3: B5 03                        lda     DSTACK+1,x              ; Transfer top value
-   400 00:01F5: 48                           pha                             ; .. to return stack
-   401 00:01F6: E8                           inx
-   402 00:01F7: E8                           inx
-   403 00:01F8: 4C xx xx                     jmp     NEXT                    ; Done
-   404                        
-   405                                        HEADER  1,"I",NORMAL,0
-+  405 00:01FB: 00 00                        dw      0
-+  405 00:01FD: 01 49 00                     db      1,"I",NORMAL
-   406                        I:
-   407 00:0200: A3 01                        lda     1,s
-   408 00:0202: CA                           dex
-   409 00:0203: CA                           dex
-   410 00:0204: 95 03                        sta     DSTACK+1,x
-   411 00:0206: 4C xx xx                     jmp     NEXT
-   412                        
-   413                                        HEADER  1,"J",NORMAL,0
-+  413 00:0209: 00 00                        dw      0
-+  413 00:020B: 01 4A 00                     db      1,"J",NORMAL
-   414                        J:
-   415 00:020E: A3 03                        lda     3,s
-   416 00:0210: CA                           dex
-   417 00:0211: CA                           dex
-   418 00:0212: 95 03                        sta     DSTACK+1,x
-   419 00:0214: 4C xx xx                     jmp     NEXT
-   420                        
-   421                        
-   422                                        HEADER  2,"R>",NORMAL,TO_R
-+  422 00:0217: xx xx                        dw      TO_R
-+  422 00:0219: 02 52 3E 00                  db      2,"R>",NORMAL
-   423                        R_FROM:
-   424 00:021D: 68                           pla                             ; Fetch return stack value
-   425 00:021E: CA                           dex                             ; And push
-   426 00:021F: CA                           dex
-   427 00:0220: 95 03                        sta     DSTACK+1,X
-   428 00:0222: 4C xx xx                     jmp     NEXT                    ; Done
-  Tue Aug 18 2015  0:45                                                                                                    Page 12
+   367                        ; consecutive cell. It is equivalent to the sequence SWAP OVER ! CELL+ !.
+   368                        
+   369                                        HEADER  2,"2!",NORMAL
++  369                        WORD19:
++  369 00:0182: xx xx                        dw      WORD18
++  369 00:0184: 00 02 32 21                  db      NORMAL,2,"2!"
++  369             00000013   COUNT           set     COUNT+1
+   370                        TWO_STORE:
+   371 00:0188: 4C xx xx                     jmp     DO_COLON
+   372 00:018B: xx xx                        dw      SWAP
+   373 00:018D: xx xx                        dw      OVER
+   374 00:018F: xx xx                        dw      STORE
+   375 00:0191: xx xx                        dw      CELL_PLUS
+   376 00:0193: xx xx                        dw      STORE
+   377 00:0195: xx xx                        dw      EXIT
+   378                        
+   379                        ; 2@ ( a-addr -- x1 x2 )
+   380                        ;
+   381                        ; Fetch the cell pair x1 x2 stored at a-addr. x2 is stored at a-addr and x1 at
+   382                        ; the next consecutive cell. It is equivalent to the sequence DUP CELL+ @ SWAP
+   383                        ; @.
+   384                        
+   385                                        HEADER  2,"2@",NORMAL
++  385                        WORD20:
++  385 00:0197: xx xx                        dw      WORD19
++  385 00:0199: 00 02 32 40                  db      NORMAL,2,"2@"
++  385             00000014   COUNT           set     COUNT+1
+   386                        TWO_FETCH:
+   387 00:019D: 4C xx xx                     jmp     DO_COLON
+   388 00:01A0: xx xx                        dw      DUP
+   389 00:01A2: xx xx                        dw      CELL_PLUS
+   390 00:01A4: xx xx                        dw      FETCH
+   391 00:01A6: xx xx                        dw      SWAP
+   392 00:01A8: xx xx                        dw      FETCH
+   393 00:01AA: xx xx                        dw      EXIT
+   394                        
+   395                        ; @ ( a-addr -- x )
+   396                        ;
+   397                        ; x is the value stored at a-addr.
+   398                        
+   399                                        HEADER  1,"@",NORMAL
++  399                        WORD21:
++  399 00:01AC: xx xx                        dw      WORD20
++  399 00:01AE: 00 01 40                     db      NORMAL,1,"@"
++  399             00000015   COUNT           set     COUNT+1
+   400                        FETCH:
+   401 00:01B1: 5A                           phy
+   402 00:01B2: B4 03                        ldy     DSTACK+1,x              ; Fetch the memory address
+   403 00:01B4: B9 00 00                     lda     0,y                     ; Load the actual data
+   404 00:01B7: 95 03                        sta     DSTACK+1,x              ; And replace the top value
+   405 00:01B9: 7A                           ply
+   406 00:01BA: 4C xx xx                     jmp     NEXT                    ; Done
+   407                        
+   408                        ; ALLOT ( n -- )
+   409                        ;
+   410                        ; If n is greater than zero, reserve n address units of data space. If n is
+   411                        ; less than zero, release |n| address units of data space. If n is zero, leave
+   412                        ; the data-space pointer unchanged.
+  Wed Aug 19 2015 17:12                                                                                                    Page 12
 
 
-   429                        
-   430                        ;==============================================================================
-   431                        ; Single Precision Arithmetic
-   432                        ;------------------------------------------------------------------------------
-   433                        
-   434                        ; + ( n1|u1 n2|u2 -- n3|u3 )
-   435                        ;
-   436                        ; Add n2|u2 to n1|u1, giving the sum n3|u3.
-   437                        
-   438                                        HEADER  1,"+",NORMAL,R_FROM
-+  438 00:0225: xx xx                        dw      R_FROM
-+  438 00:0227: 01 2B 00                     db      1,"+",NORMAL
-   439                        PLUS:
-   440 00:022A: 18                           clc
-   441 00:022B: B5 03                        lda     DSTACK+1,x
-   442 00:022D: 75 05                        adc     DSTACK+3,x
-   443 00:022F: 95 05                        sta     DSTACK+3,x
-   444 00:0231: E8                           inx
-   445 00:0232: E8                           inx
-   446 00:0233: 4C xx xx                     JMP     NEXT                    ; Done
-   447                        
-   448                        ; - ( n1|u1 n2|u2 -- n3|u3 )
-   449                        ;
-   450                        ; Subtract n2|u2 from n1|u1, giving the difference n3|u3.
-   451                        
-   452                                        HEADER  1,"-",NORMAL,PLUS
-+  452 00:0236: xx xx                        dw      PLUS
-+  452 00:0238: 01 2D 00                     db      1,"-",NORMAL
-   453                        MINUS:
-   454 00:023B: 38                           sec
-   455 00:023C: B5 03                        lda     DSTACK+1,x
-   456 00:023E: F5 05                        sbc     DSTACK+3,x
-   457 00:0240: 95 05                        sta     DSTACK+3,x
-   458 00:0242: E8                           inx
-   459 00:0243: E8                           inx
-   460 00:0244: 4C xx xx                     jmp     NEXT
-   461                        
-   462                        ; 1+ ( n1|u1 -- n2|u2 )
-   463                        ;
-   464                        ; Add one (1) to n1|u1 giving the sum n2|u2.
+   413                        ;
+   414                        ; In this implementation its is defined as:
+   415                        ;
+   416                        ;   DP +!
+   417                        
+   418                                        HEADER  5,"ALLOT",NORMAL
++  418                        WORD22:
++  418 00:01BD: xx xx                        dw      WORD21
++  418 00:01BF: 00 05 41 4C                  db      NORMAL,5,"ALLOT"
+       00:01C3: 4C 4F 54 
++  418             00000016   COUNT           set     COUNT+1
+   419 00:01C6: 4C xx xx     ALLOT:          jmp     DO_COLON
+   420 00:01C9: xx xx xx xx                  dw      DP,PLUS_STORE
+   421 00:01CD: xx xx                        dw      EXIT
+   422                        
+   423                        ; C! ( char c-addr -- )
+   424                        ;
+   425                        ; Store char at c-addr. When character size is smaller than cell size, only the
+   426                        ; number of low-order bits corresponding to character size are transferred.
+   427                        
+   428                                        HEADER  2,"C!",NORMAL
++  428                        WORD23:
++  428 00:01CF: xx xx                        dw      WORD22
++  428 00:01D1: 00 02 43 21                  db      NORMAL,2,"C!"
++  428             00000017   COUNT           set     COUNT+1
+   429                        C_STORE:
+   430 00:01D5: 5A                           phy
+   431 00:01D6: B4 03                        ldy     DSTACK+1,x              ; Fetch the memory address
+   432 00:01D8: B5 05                        lda     DSTACK+3,x              ; Fetch the data value
+   433                                        short_a
++  433 00:01DA: E2 20                        sep     #(1<<M_FLAG)
++  433                                        longa   off
+   434 00:01DC: 99 00 00                     sta     0,y                     ; Save it
+   435                                        long_a
++  435 00:01DF: C2 20                        rep     #(1<<M_FLAG)
++  435                                        longa   on
+   436 00:01E1: E8                           inx
+   437 00:01E2: E8                           inx
+   438 00:01E3: E8                           inx
+   439 00:01E4: E8                           inx
+   440 00:01E5: 7A                           ply
+   441 00:01E6: 4C xx xx                     jmp     NEXT                    ; Done
+   442                        
+   443                        ; C, ( char -- )
+   444                        ;
+   445                        ; Reserve space for one character in the data space and store char in the
+   446                        ; space. If the data-space pointer is character aligned when C, begins
+   447                        ; execution, it will remain character aligned when C, finishes execution.
+   448                        ; An ambiguous condition exists if the data-space pointer is not character-
+   449                        ; aligned prior to execution of C,
+   450                        ;
+   451                        ;   HERE C! 1 CHARS ALLOT
+   452                        
+   453                        ;               HEADER  2,"C,",NORMAL
+   454 00:01E9: xx xx                        dw      C_STORE
+   455 00:01EB: 02 43 2C 00                  db      2,"C,",NORMAL
+   456 00:01EF: 4C xx xx     C_COMMA:        jmp     DO_COLON
+   457 00:01F2: xx xx xx xx                  dw      HERE,C_STORE
+  Wed Aug 19 2015 17:12                                                                                                    Page 13
+
+
+   458 00:01F6: xx xx 01 00                  dw      DO_LITERAL,1,CHARS,ALLOT
+       00:01FA: xx xx xx xx 
+   459 00:01FE: xx xx                        dw      EXIT
+   460                        
+   461                        ; C@ ( c-addr -- char )
+   462                        ;
+   463                        ; Fetch the character stored at c-addr. When the cell size is greater than
+   464                        ; character size, the unused high-order bits are all zeroes.
    465                        
-   466                                        HEADER  2,"1+",NORMAL,MINUS
-+  466 00:0247: xx xx                        dw      MINUS
-+  466 00:0249: 02 31 2B 00                  db      2,"1+",NORMAL
-   467                        ONE_PLUS:
-   468 00:024D: F6 03                        inc     DSTACK+1,x
-   469 00:024F: 4C xx xx                     jmp     NEXT                    ; Done
-   470                        
-   471                        
-   472                                        HEADER  2,"1-",NORMAL,ONE_PLUS
-+  472 00:0252: xx xx                        dw      ONE_PLUS
-+  472 00:0254: 02 31 2D 00                  db      2,"1-",NORMAL
-   473                        ONE_MINUS:
-   474 00:0258: D6 03                        dec     DSTACK+1,x
-   475 00:025A: 4C xx xx                     jmp     NEXT
-   476                        
-   477                        ; NEGATE ( n1 -- n2 )
-   478                        ;
-  Tue Aug 18 2015  0:45                                                                                                    Page 13
-
-
-   479                        ; Negate n1, giving its arithmetic inverse n2.
-   480                        
-   481                                        HEADER  6,"NEGATE",NORMAL,ONE_PLUS
-+  481 00:025D: xx xx                        dw      ONE_PLUS
-+  481 00:025F: 06 4E 45 47                  db      6,"NEGATE",NORMAL
-       00:0263: 41 54 45 00 
-   482                        NEGATE:
-   483 00:0267: 38                           sec
-   484 00:0268: A9 00 00                     lda     #0
-   485 00:026B: F5 03                        sbc     DSTACK+1,x
-   486 00:026D: 95 03                        sta     DSTACK+1,x
-   487 00:026F: 4C xx xx                     jmp     NEXT                    ; Done
+   466                                        HEADER  2,"C@",NORMAL
++  466                        WORD24:
++  466 00:0200: xx xx                        dw      WORD23
++  466 00:0202: 00 02 43 40                  db      NORMAL,2,"C@"
++  466             00000018   COUNT           set     COUNT+1
+   467                        C_FETCH:
+   468 00:0206: 5A                           phy
+   469 00:0207: B4 03                        ldy     DSTACK+1,x              ; Fetch the memory address
+   470                                        short_a
++  470 00:0209: E2 20                        sep     #(1<<M_FLAG)
++  470                                        longa   off
+   471 00:020B: B9 00 00                     lda     0,y                     ; Load the actual data
+   472                                        long_a
++  472 00:020E: C2 20                        rep     #(1<<M_FLAG)
++  472                                        longa   on
+   473 00:0210: 29 FF 00                     and     #$00ff
+   474 00:0213: 95 03                        sta     DSTACK+1,x              ; And replace the top value
+   475 00:0215: 7A                           ply
+   476 00:0216: 4C xx xx                     jmp     NEXT                    ; Done
+   477                        
+   478                        ; HERE
+   479                        
+   480                                        HEADER  4,"HERE",NORMAL
++  480                        WORD25:
++  480 00:0219: xx xx                        dw      WORD24
++  480 00:021B: 00 04 48 45                  db      NORMAL,4,"HERE"
+       00:021F: 52 45 
++  480             00000019   COUNT           set     COUNT+1
+   481 00:0221: 4C xx xx     HERE:           jmp     DO_COLON
+   482 00:0224: xx xx xx xx                  dw      DP,FETCH
+   483 00:0228: xx xx                        dw      EXIT
+   484                        
+   485                        ;==============================================================================
+   486                        ; Alignment
+   487                        ;------------------------------------------------------------------------------
    488                        
-   489                        ;==============================================================================
-   490                        ; Mixed Arithmetic
-   491                        ;------------------------------------------------------------------------------
+   489                        ; ALIGN ( -- )
+   490                        ;
+   491                        ; If the data-space pointer is not aligned, reserve enough space to align it.
    492                        
-   493                        ;==============================================================================
-   494                        ; Comparisons
-   495                        ;------------------------------------------------------------------------------
+   493                                        HEADER  5,"ALIGN",NORMAL
++  493                        WORD26:
++  493 00:022A: xx xx                        dw      WORD25
++  493 00:022C: 00 05 41 4C                  db      NORMAL,5,"ALIGN"
+       00:0230: 49 47 4E 
++  493             0000001A   COUNT           set     COUNT+1
+   494                        ALIGN:
+   495 00:0233: 4C xx xx                     jmp     NEXT                    ; Done
    496                        
-   497                        ; 0< ( n -- flag )
+  Wed Aug 19 2015 17:12                                                                                                    Page 14
+
+
+   497                        ; ALIGNED ( addr -- a-addr )
    498                        ;
-   499                        ; flag is true if and only if n is less than zero.
+   499                        ; a-addr is the first aligned address greater than or equal to addr.
    500                        
-   501                                        HEADER  2,"0<",NORMAL,0
-+  501 00:0272: 00 00                        dw      0
-+  501 00:0274: 02 30 3C 00                  db      2,"0<",NORMAL
-   502                        ZERO_LESS:
-   503 00:0278: B5 03                        lda     DSTACK+1,x              ; Test top of stack
-   504 00:027A: 74 03                        stz     DSTACK+1,x              ; Assume false result
-   505 00:027C: 10 03                        bpl     $+5                     ; Was the value negative?
-   506 00:027E: D6 03                        dec     DSTACK+1,x              ; Yes, make true result
-   507 00:0280: 4C xx xx                     jmp     NEXT
+   501                                        HEADER  7,"ALIGNED",NORMAL
++  501                        WORD27:
++  501 00:0236: xx xx                        dw      WORD26
++  501 00:0238: 00 07 41 4C                  db      NORMAL,7,"ALIGNED"
+       00:023C: 49 47 4E 45 
+       00:0240: 44 
++  501             0000001B   COUNT           set     COUNT+1
+   502                        ALIGNED:
+   503 00:0241: 4C xx xx                     jmp     NEXT                    ; Done
+   504                        
+   505                        ; CELL+ ( a-addr1 -- a-addr2 )
+   506                        ;
+   507                        ; Add the size in address units of a cell to a-addr1, giving a-addr2.
    508                        
-   509                        ; 0= ( x -- flag )
-   510                        ;
-   511                        ; flag is true if and only if x is equal to zero.
-   512                        
-   513                                        HEADER  2,"0=",NORMAL,ZERO_LESS
-+  513 00:0283: xx xx                        dw      ZERO_LESS
-+  513 00:0285: 02 30 3D 00                  db      2,"0=",NORMAL
-   514                        ZERO_EQUAL:
-   515 00:0289: B5 03                        lda     DSTACK+1,x              ; Test top of stack
-   516 00:028B: 74 03                        stz     DSTACK+1,x              ; Assume false result
-   517 00:028D: D0 03                        bne     $+5                     ; Was the value zero?
-   518 00:028F: D6 03                        dec     DSTACK+1,x              ; Yes, make true result
-   519 00:0291: 4C xx xx                     jmp     NEXT
-   520                        
-   521                        ; 0> ( n -- flag )
-   522                        ;
-   523                        ; flag is true if and only if n is greater than zero.
-   524                        
-   525                                        HEADER  2,"0>",NORMAL,ZERO_EQUAL
-+  525 00:0294: xx xx                        dw      ZERO_EQUAL
-+  525 00:0296: 02 30 3E 00                  db      2,"0>",NORMAL
-   526                        ZERO_GREATER:
-   527 00:029A: B5 03                        lda     DSTACK+1,x              ; Test top of stack
-  Tue Aug 18 2015  0:45                                                                                                    Page 14
+   509                                        HEADER  5,"CELL+",NORMAL
++  509                        WORD28:
++  509 00:0244: xx xx                        dw      WORD27
++  509 00:0246: 00 05 43 45                  db      NORMAL,5,"CELL+"
+       00:024A: 4C 4C 2B 
++  509             0000001C   COUNT           set     COUNT+1
+   510                        CELL_PLUS:
+   511 00:024D: F6 03                        inc     DSTACK+1,x              ; Bump the address by two
+   512 00:024F: F6 03                        inc     DSTACK+1,X
+   513 00:0251: 4C xx xx                     jmp     NEXT
+   514                        
+   515                        ; CELLS ( n1 -- n2 )
+   516                        ;
+   517                        ; n2 is the size in address units of n1 cells.
+   518                        
+   519                                        HEADER  5,"CELLS",NORMAL
++  519                        WORD29:
++  519 00:0254: xx xx                        dw      WORD28
++  519 00:0256: 00 05 43 45                  db      NORMAL,5,"CELLS"
+       00:025A: 4C 4C 53 
++  519             0000001D   COUNT           set     COUNT+1
+   520                        CELLS:
+   521 00:025D: 16 03                        asl     DSTACK+1,x              ; Two bytes per cell
+   522 00:025F: 4C xx xx                     jmp     NEXT
+   523                        
+   524                        ; CHAR+ ( c-addr1 -- c-addr2 )
+   525                        ;
+   526                        ; Add the size in address units of a character to c-addr1, giving c-addr2.
+   527                        
+   528                                        HEADER  5,"CHAR+",NORMAL
++  528                        WORD30:
++  528 00:0262: xx xx                        dw      WORD29
++  528 00:0264: 00 05 43 48                  db      NORMAL,5,"CHAR+"
+       00:0268: 41 52 2B 
++  528             0000001E   COUNT           set     COUNT+1
+   529                        CHAR_PLUS:
+   530 00:026B: F6 03                        inc     DSTACK+1,x              ; Bump the address by one
+   531 00:026D: 4C xx xx                     jmp     NEXT
+   532                        
+   533                        ; CHARS ( n1 -- n2 )
+  Wed Aug 19 2015 17:12                                                                                                    Page 15
 
 
-   528 00:029C: 74 03                        stz     DSTACK+1,x              ; Assume false result
-   529 00:029E: 30 05                        bmi     $+7                     ; Was the value positive?
-   530 00:02A0: F0 03                        beq     $+5                     ; .. but not zero
-   531 00:02A2: D6 03                        dec     DSTACK+1,x              ; Yes, make true result
-   532 00:02A4: 4C xx xx                     jmp     NEXT
-   533                        
-   534                        ;==============================================================================
-   535                        ; Logical Operations
-   536                        ;------------------------------------------------------------------------------
-   537                        
-   538                        ; AND ( x1 x2 -- x3 )
-   539                        ;
-   540                        ; x3 is the bit-by-bit logical “and” of x1 with x2.
-   541                        
-   542                                        HEADER  3,"AND",NORMAL,NEGATE
-+  542 00:02A7: xx xx                        dw      NEGATE
-+  542 00:02A9: 03 41 4E 44                  db      3,"AND",NORMAL
-       00:02AD: 00 
-   543                        AND:
-   544 00:02AE: B5 03                        lda     DSTACK+1,x
-   545 00:02B0: 35 05                        and     DSTACK+3,x
-   546 00:02B2: 95 05                        sta     DSTACK+3,x
-   547 00:02B4: E8                           inx
-   548 00:02B5: E8                           inx
-   549 00:02B6: 4C xx xx                     jmp     NEXT
-   550                        
-   551                        ; INVERT ( x -- !x )
-   552                        
-   553                                        HEADER  6,"INVERT",NORMAL,AND
-+  553 00:02B9: xx xx                        dw      AND
-+  553 00:02BB: 06 49 4E 56                  db      6,"INVERT",NORMAL
-       00:02BF: 45 52 54 00 
-   554                        INVERT:
-   555 00:02C3: B5 03                        lda     DSTACK+1,x              ; Fetch top value
-   556 00:02C5: 49 FF FF                     eor     #$ffff                  ; Invert all the bits
-   557 00:02C8: 95 03                        sta     DSTACK+1,x              ; And write back
-   558 00:02CA: 4C xx xx                     jmp     NEXT                    ; Done
-   559                        
-   560                        ; AND ( x1 x2 -- x3 )
-   561                        
-   562                                        HEADER  2,"OR",NORMAL,INVERT
-+  562 00:02CD: xx xx                        dw      INVERT
-+  562 00:02CF: 02 4F 52 00                  db      2,"OR",NORMAL
-   563                        OR:
-   564 00:02D3: B5 03                        lda     DSTACK+1,x
-   565 00:02D5: 15 05                        ora     DSTACK+3,x
-   566 00:02D7: 95 05                        sta     DSTACK+3,x
-   567 00:02D9: E8                           inx
-   568 00:02DA: E8                           inx
-   569 00:02DB: 4C xx xx                     jmp     NEXT
-   570                        
-   571                        ; XOR ( x1 x2 -- x3 )
-   572                        
-   573                                        HEADER  3,"XOR",NORMAL,OR
-+  573 00:02DE: xx xx                        dw      OR
-+  573 00:02E0: 03 58 4F 52                  db      3,"XOR",NORMAL
-       00:02E4: 00 
-   574                        XOR:
-  Tue Aug 18 2015  0:45                                                                                                    Page 15
+   534                        ;
+   535                        ; n2 is the size in address units of n1 characters.
+   536                        
+   537                                        HEADER  5,"CHARS",NORMAL
++  537                        WORD31:
++  537 00:0270: xx xx                        dw      WORD30
++  537 00:0272: 00 05 43 48                  db      NORMAL,5,"CHARS"
+       00:0276: 41 52 53 
++  537             0000001F   COUNT           set     COUNT+1
+   538                        CHARS:
+   539 00:0279: 4C xx xx                     jmp     NEXT
+   540                        
+   541                        ;==============================================================================
+   542                        ; Stack Operations
+   543                        ;------------------------------------------------------------------------------
+   544                        
+   545                        ; 2DROP ( x1 x2 -- )
+   546                        ;
+   547                        ; Drop cell pair x1 x2 from the stack.
+   548                        
+   549                                        HEADER  5,"2DROP",NORMAL
++  549                        WORD32:
++  549 00:027C: xx xx                        dw      WORD31
++  549 00:027E: 00 05 32 44                  db      NORMAL,5,"2DROP"
+       00:0282: 52 4F 50 
++  549             00000020   COUNT           set     COUNT+1
+   550                        TWO_DROP:
+   551 00:0285: E8                           inx
+   552 00:0286: E8                           inx
+   553 00:0287: E8                           inx
+   554 00:0288: E8                           inx
+   555 00:0289: 4C xx xx                     jmp     NEXT
+   556                        
+   557                        ; 2DUP
+   558                        
+   559                        ; 2OVER
+   560                        
+   561                        ; ?DUP
+   562                        
+   563                                        HEADER  4,"?DUP",NORMAL
++  563                        WORD33:
++  563 00:028C: xx xx                        dw      WORD32
++  563 00:028E: 00 04 3F 44                  db      NORMAL,4,"?DUP"
+       00:0292: 55 50 
++  563             00000021   COUNT           set     COUNT+1
+   564                        QUERY_DUP:
+   565 00:0294: B5 03                        lda     DSTACK+1,x
+   566 00:0296: F0 04                        beq     QUERY_DUP_1
+   567 00:0298: CA                           dex
+   568 00:0299: CA                           dex
+   569 00:029A: 95 03                        sta     DSTACK+1,x
+   570 00:029C: 4C xx xx     QUERY_DUP_1:    jmp     NEXT
+   571                        
+   572                        ; DROP ( x -- )
+   573                        ;
+   574                        ; Remove x from the stack.
+   575                        
+   576                                        HEADER  4,"DROP",NORMAL
+  Wed Aug 19 2015 17:12                                                                                                    Page 16
 
 
-   575 00:02E5: B5 03                        lda     DSTACK+1,x
-   576 00:02E7: 55 05                        eor     DSTACK+3,x
-   577 00:02E9: 95 05                        sta     DSTACK+3,x
-   578 00:02EB: E8                           inx
-   579 00:02EC: E8                           inx
-   580 00:02ED: 4C xx xx                     jmp     NEXT
++  576                        WORD34:
++  576 00:029F: xx xx                        dw      WORD33
++  576 00:02A1: 00 04 44 52                  db      NORMAL,4,"DROP"
+       00:02A5: 4F 50 
++  576             00000022   COUNT           set     COUNT+1
+   577                        DROP:
+   578 00:02A7: E8                           inx                             ; Drop the top value
+   579 00:02A8: E8                           inx
+   580 00:02A9: 4C xx xx                     jmp     NEXT                    ; Done
    581                        
-   582                        ;==============================================================================
-   583                        ; Control Words
-   584                        ;------------------------------------------------------------------------------
+   582                        ; DUP ( x -- x x )
+   583                        ;
+   584                        ; Duplicate x.
    585                        
-   586                        ; ABORT ( i*x -- ) ( R: j*x -- )
-   587                        ;
-   588                        ; Empty the data stack and perform the function of QUIT, which includes
-   589                        ; emptying the return stack, without displaying a message.
-   590                        
-   591                                        HEADER  5,"ABORT",NORMAL,COLON
-+  591 00:02F0: xx xx                        dw      COLON
-+  591 00:02F2: 05 41 42 4F                  db      5,"ABORT",NORMAL
-       00:02F6: 52 54 00 
-   592 00:02F9: 4C xx xx     ABORT:          jmp     DO_COLON
-   593 00:02FC: xx xx                        dw      DO_ABORT
-   594 00:02FE: xx xx                        dw      QUIT
+   586                                        HEADER  3,"DUP",NORMAL
++  586                        WORD35:
++  586 00:02AC: xx xx                        dw      WORD34
++  586 00:02AE: 00 03 44 55                  db      NORMAL,3,"DUP"
+       00:02B2: 50 
++  586             00000023   COUNT           set     COUNT+1
+   587                        DUP:
+   588 00:02B3: B5 03                        lda     DSTACK+1,x              ; Fetch top value
+   589 00:02B5: CA                           dex                             ; And make a copy
+   590 00:02B6: CA                           dex
+   591 00:02B7: 95 03                        sta     DSTACK+1,x
+   592 00:02B9: 4C xx xx                     jmp     NEXT                    ; Done
+   593                        
+   594                        ; OVER ( x1 x2 -- x1 x2 x1 )
    595                        
-   596                        DO_ABORT:
-   597 00:0300: A2 81 00                     ldx     #DSTACK_INIT
-   598 00:0303: 4C xx xx                     jmp     NEXT
-   599                        
-   600                        ; EXIT ( -- ) ( R: nest-sys -- )
-   601                        
-   602                                        HEADER  4,"EXIT",NORMAL,ABORT
-+  602 00:0306: xx xx                        dw      ABORT
-+  602 00:0308: 04 45 58 49                  db      4,"EXIT",NORMAL
-       00:030C: 54 00 
-   603                        EXIT:
-   604 00:030E: 7A                           ply
-   605 00:030F: 4C xx xx                     jmp     NEXT
-   606                        
-   607                        ; QUIT ( -- ) ( R: i*x -- )
-   608                        ;
-   609                        ; Empty the return stack, store zero in SOURCE-ID if it is present, make the
-   610                        ; user input device the input source, and enter interpretation state. Do not
-   611                        ; display a message. Repeat the following:
-   612                        ; – Accept a line from the input source into the input buffer, set >IN to zero,
-   613                        ;   and interpret.
-   614                        ; – Display the implementation-defined system prompt if in interpretation state,
-   615                        ;   all processing has been completed, and no ambiguous condition exists.
-   616                        ;
-   617                        ; In this implementation it is defined as:
-   618                        ;
-   619                        ;   DO_QUIT 0 STATE !
-   620                        ;   BEGIN
-   621                        ;       REFILL
-   622                        ;       WHILE SOURCE EVALUATE
-   623                        ;       STATE @ 0= IF CR S" OK" THEN
-   624                        ;   AGAIN ;
-   625                        
-   626                                        HEADER  4,"QUIT",NORMAL,EXIT
-  Tue Aug 18 2015  0:45                                                                                                    Page 16
+   596                                        HEADER  4,"OVER",NORMAL
++  596                        WORD36:
++  596 00:02BC: xx xx                        dw      WORD35
++  596 00:02BE: 00 04 4F 56                  db      NORMAL,4,"OVER"
+       00:02C2: 45 52 
++  596             00000024   COUNT           set     COUNT+1
+   597                        OVER:
+   598 00:02C4: B5 05                        lda     DSTACK+3,x              ; Fetch second value
+   599 00:02C6: CA                           dex                             ; And make a copy
+   600 00:02C7: CA                           dex
+   601 00:02C8: 95 03                        sta     DSTACK+1,x
+   602 00:02CA: 4C xx xx                     jmp     NEXT                    ; Done
+   603                        
+   604                        ; SWAP ( x1 x2 -- x2 x1 )
+   605                        
+   606                                        HEADER  4,"SWAP",NORMAL
++  606                        WORD37:
++  606 00:02CD: xx xx                        dw      WORD36
++  606 00:02CF: 00 04 53 57                  db      NORMAL,4,"SWAP"
+       00:02D3: 41 50 
++  606             00000025   COUNT           set     COUNT+1
+   607                        SWAP:
+   608 00:02D5: B5 03                        lda     DSTACK+1,x              ; Fetch top of stack
+   609 00:02D7: 48                           pha                             ; .. and save
+   610 00:02D8: B5 05                        lda     DSTACK+3,x              ; Exchange second
+   611 00:02DA: 95 03                        sta     DSTACK+1,x              ; .. and top
+   612 00:02DC: 68                           pla                             ; Recover top
+   613 00:02DD: 95 05                        sta     DSTACK+3,x              ; .. and save as second
+   614 00:02DF: 4C xx xx                     jmp     NEXT                    ; Done
+  Wed Aug 19 2015 17:12                                                                                                    Page 17
 
 
-+  626 00:0312: xx xx                        dw      EXIT
-+  626 00:0314: 04 51 55 49                  db      4,"QUIT",NORMAL
-       00:0318: 54 00 
-   627 00:031A: 4C xx xx     QUIT:           jmp     DO_COLON
-   628 00:031D: xx xx                        dw      DO_QUIT
-   629 00:031F: xx xx xx xx                  dw      ZERO,STATE,STORE
-       00:0323: xx xx 
-   630                        
-   631                        
-   632                        DO_QUIT:
-   633 00:0325: A9 FF 01                     lda     #RSTACK_INIT            ; Reset the return stack
-   634 00:0328: 1B                           tcs
-   635 00:0329: 4C xx xx                     jmp     NEXT                    ; Done
-   636                        
-   637                        ;==============================================================================
-   638                        ; Compiling Words
-   639                        ;------------------------------------------------------------------------------
-   640                        
-   641                                        HEADER  10,"(CONSTANT)",NORMAL,0
-+  641 00:032C: 00 00                        dw      0
-+  641 00:032E: 0A 28 43 4F                  db      10,"(CONSTANT)",NORMAL
-       00:0332: 4E 53 54 41 
-       00:0336: 4E 54 29 00 
-   642                        DO_CONSTANT:
+   615                        
+   616                        ;==============================================================================
+   617                        ; Return Stack Operations
+   618                        ;------------------------------------------------------------------------------
+   619                        
+   620                                        HEADER  2,">R",NORMAL
++  620                        WORD38:
++  620 00:02E2: xx xx                        dw      WORD37
++  620 00:02E4: 00 02 3E 52                  db      NORMAL,2,">R"
++  620             00000026   COUNT           set     COUNT+1
+   621                        TO_R:
+   622 00:02E8: B5 03                        lda     DSTACK+1,x              ; Transfer top value
+   623 00:02EA: 48                           pha                             ; .. to return stack
+   624 00:02EB: E8                           inx
+   625 00:02EC: E8                           inx
+   626 00:02ED: 4C xx xx                     jmp     NEXT                    ; Done
+   627                        
+   628                                        HEADER  1,"I",NORMAL
++  628                        WORD39:
++  628 00:02F0: xx xx                        dw      WORD38
++  628 00:02F2: 00 01 49                     db      NORMAL,1,"I"
++  628             00000027   COUNT           set     COUNT+1
+   629                        I:
+   630 00:02F5: A3 01                        lda     1,s
+   631 00:02F7: CA                           dex
+   632 00:02F8: CA                           dex
+   633 00:02F9: 95 03                        sta     DSTACK+1,x
+   634 00:02FB: 4C xx xx                     jmp     NEXT
+   635                        
+   636                                        HEADER  1,"J",NORMAL
++  636                        WORD40:
++  636 00:02FE: xx xx                        dw      WORD39
++  636 00:0300: 00 01 4A                     db      NORMAL,1,"J"
++  636             00000028   COUNT           set     COUNT+1
+   637                        J:
+   638 00:0303: A3 03                        lda     3,s
+   639 00:0305: CA                           dex
+   640 00:0306: CA                           dex
+   641 00:0307: 95 03                        sta     DSTACK+1,x
+   642 00:0309: 4C xx xx                     jmp     NEXT
    643                        
-   644                                        HEADER  4,"(DO)",NORMAL,0
-+  644 00:033A: 00 00                        dw      0
-+  644 00:033C: 04 28 44 4F                  db      4,"(DO)",NORMAL
-       00:0340: 29 00 
-   645                        DO_DO:
-   646 00:0342: B5 05                        lda     DSTACK+3,x
-   647 00:0344: 48                           pha
-   648 00:0345: B5 03                        lda     DSTACK+1,x
-   649 00:0347: 48                           pha
-   650 00:0348: E8                           inx
-   651 00:0349: E8                           inx
-   652 00:034A: E8                           inx
-   653 00:034B: E8                           inx
-   654 00:034C: 4C xx xx                     jmp     NEXT
-   655                        
-   656                                        HEADER  10,"(LITERAL)",NORMAL,0
-+  656 00:034F: 00 00                        dw      0
-+  656 00:0351: 0A 28 4C 49                  db      10,"(LITERAL)",NORMAL
-       00:0355: 54 45 52 41 
-       00:0359: 4C 29 00 
-   657                        DO_LITERAL:
-   658                        
-   659                                        HEADER  6,"(LOOP)",NORMAL,0
-+  659 00:035C: 00 00                        dw      0
-+  659 00:035E: 06 28 4C 4F                  db      6,"(LOOP)",NORMAL
-       00:0362: 4F 50 29 00 
-   660                        DO_LOOP
-   661 00:0366: A3 01                        lda     1,s                     ; Add one to loop counter
-   662 00:0368: 1A                           inc	a
-   663 00:0369: 83 01        		sta	1,s
-   664 00:036B: C3 03                        cmp     3,s
-   665                        		
-   666 00:036D: 4C xx xx     		jmp	NEXT
-  Tue Aug 18 2015  0:45                                                                                                    Page 17
+   644                        
+   645                                        HEADER  2,"R>",NORMAL
++  645                        WORD41:
++  645 00:030C: xx xx                        dw      WORD40
++  645 00:030E: 00 02 52 3E                  db      NORMAL,2,"R>"
++  645             00000029   COUNT           set     COUNT+1
+   646                        R_FROM:
+   647 00:0312: 68                           pla                             ; Fetch return stack value
+   648 00:0313: CA                           dex                             ; And push
+   649 00:0314: CA                           dex
+   650 00:0315: 95 03                        sta     DSTACK+1,X
+   651 00:0317: 4C xx xx                     jmp     NEXT                    ; Done
+   652                        
+   653                        ;==============================================================================
+   654                        ; Single Precision Arithmetic
+   655                        ;------------------------------------------------------------------------------
+   656                        
+  Wed Aug 19 2015 17:12                                                                                                    Page 18
 
 
+   657                        ; * ( n1|u1 n2|u2 -- n3|u3 )
+   658                        ;
+   659                        ; Multiply n1|u1 by n2|u2 giving the product n3|u3.
+   660                        
+   661                                        HEADER  1,"*",NORMAL
++  661                        WORD42:
++  661 00:031A: xx xx                        dw      WORD41
++  661 00:031C: 00 01 2A                     db      NORMAL,1,"*"
++  661             0000002A   COUNT           set     COUNT+1
+   662                        STAR:
+   663 00:031F: 4C xx xx                     jmp     NEXT                    ; Done
+   664                        
+   665                        ; */
+   666                        ; */MOD
    667                        
-   668                                        HEADER  10,"(USER)",NORMAL,0
-+  668 00:0370: 00 00                        dw      0
-+  668 00:0372: 0A 28 55 53                  db      10,"(USER)",NORMAL
-       00:0376: 45 52 29 00 
-   669                        DO_USER:
-   670                        
-   671                                        HEADER  10,"(VARIABLE)",NORMAL,0
-+  671 00:037A: 00 00                        dw      0
-+  671 00:037C: 0A 28 56 41                  db      10,"(VARIABLE)",NORMAL
-       00:0380: 52 49 41 42 
-       00:0384: 4C 45 29 00 
-   672                        DO_VARIABLE:
-   673                        
-   674                        
-   675                        ; : ()
-   676                        
-   677                                        HEADER  1,":",IMMEDIATE,0
-+  677 00:0388: 00 00                        dw      0
-+  677 00:038A: 01 3A 01                     db      1,":",IMMEDIATE
-   678                        COLON:
-   679                        
-   680                        
-   681                        DO_COLON:
-   682 00:038D: 5A                           phy                             ; Save the instruction pointer
-   683 00:038E: A8                           tay                             ; Calculate the new IP
-   684 00:038F: C8                           iny
-   685 00:0390: C8                           iny
-   686 00:0391: C8                           iny
-   687                        NEXT:
-   688 00:0392: B9 00 00                     lda     0,y                     ; Fetch the next word address
-   689 00:0395: 85 00                        sta     WA
-   690 00:0397: C8                           iny                             ; Bump the instruction pointer
-   691 00:0398: C8                           iny
-   692 00:0399: 6C 00 00                     jmp     (!WA)                   ; And execute word
-   693                        
-   694                        
-   695                                        HEADER  8,"CONSTANT",IMMEDIATE,0
-+  695 00:039C: 00 00                        dw      0
-+  695 00:039E: 08 43 4F 4E                  db      8,"CONSTANT",IMMEDIATE
-       00:03A2: 53 54 41 4E 
-       00:03A6: 54 01 
-   696                        CONSTANT:
-   697                        
-   698                        
+   668                        
+   669                        ; + ( n1|u1 n2|u2 -- n3|u3 )
+   670                        ;
+   671                        ; Add n2|u2 to n1|u1, giving the sum n3|u3.
+   672                        
+   673                                        HEADER  1,"+",NORMAL
++  673                        WORD43:
++  673 00:0322: xx xx                        dw      WORD42
++  673 00:0324: 00 01 2B                     db      NORMAL,1,"+"
++  673             0000002B   COUNT           set     COUNT+1
+   674                        PLUS:
+   675 00:0327: 18                           clc                             ; Add top two values
+   676 00:0328: B5 03                        lda     DSTACK+1,x
+   677 00:032A: 75 05                        adc     DSTACK+3,x
+   678 00:032C: 95 05                        sta     DSTACK+3,x              ; Save result
+   679 00:032E: E8                           inx                             ; Clean up data stack
+   680 00:032F: E8                           inx
+   681 00:0330: 4C xx xx                     JMP     NEXT                    ; Done
+   682                        
+   683                        ; - ( n1|u1 n2|u2 -- n3|u3 )
+   684                        ;
+   685                        ; Subtract n2|u2 from n1|u1, giving the difference n3|u3.
+   686                        
+   687                                        HEADER  1,"-",NORMAL
++  687                        WORD44:
++  687 00:0333: xx xx                        dw      WORD43
++  687 00:0335: 00 01 2D                     db      NORMAL,1,"-"
++  687             0000002C   COUNT           set     COUNT+1
+   688                        MINUS:
+   689 00:0338: 38                           sec                             ; Subtract top two values
+   690 00:0339: B5 03                        lda     DSTACK+1,x
+   691 00:033B: F5 05                        sbc     DSTACK+3,x
+   692 00:033D: 95 05                        sta     DSTACK+3,x              ; Save result
+   693 00:033F: E8                           inx                             ; Clean up data stack
+   694 00:0340: E8                           inx
+   695 00:0341: 4C xx xx                     jmp     NEXT                    ; Done
+   696                        
+   697                        ; /
+   698                        ; /MOD
    699                        
-   700                                        HEADER  2,"IF",IMMEDIATE,0
-+  700 00:03A8: 00 00                        dw      0
-+  700 00:03AA: 02 49 46 01                  db      2,"IF",IMMEDIATE
-   701                        IF:
-   702                        
+   700                        ; 1+ ( n1|u1 -- n2|u2 )
+   701                        ;
+   702                        ; Add one (1) to n1|u1 giving the sum n2|u2.
+  Wed Aug 19 2015 17:12                                                                                                    Page 19
+
+
    703                        
-   704                        
-   705                                        HEADER  2,"S""",IMMEDIATE,0
-+  705 00:03AE: 00 00                        dw      0
-+  705 00:03B0: 02 53 22 01                  db      2,"S""",IMMEDIATE
-   706                        S_QUOTE:
-   707                        
-  Tue Aug 18 2015  0:45                                                                                                    Page 18
+   704                                        HEADER  2,"1+",NORMAL
++  704                        WORD45:
++  704 00:0344: xx xx                        dw      WORD44
++  704 00:0346: 00 02 31 2B                  db      NORMAL,2,"1+"
++  704             0000002D   COUNT           set     COUNT+1
+   705                        ONE_PLUS:
+   706 00:034A: F6 03                        inc     DSTACK+1,x              ; Increment top of stack
+   707 00:034C: 4C xx xx                     jmp     NEXT                    ; Done
+   708                        
+   709                        ; 1- ( n1|u1 -- n2|u2 )
+   710                        ;
+   711                        ; Subtract one (1) from n1|u1 giving the difference n2|u2.
+   712                        
+   713                                        HEADER  2,"1-",NORMAL
++  713                        WORD46:
++  713 00:034F: xx xx                        dw      WORD45
++  713 00:0351: 00 02 31 2D                  db      NORMAL,2,"1-"
++  713             0000002E   COUNT           set     COUNT+1
+   714                        ONE_MINUS:
+   715 00:0355: D6 03                        dec     DSTACK+1,x              ; Decrement top of stack
+   716 00:0357: 4C xx xx                     jmp     NEXT                    ; Done
+   717                        
+   718                        ; 2* ( x1 -- x2 )
+   719                        ;
+   720                        ; x2 is the result of shifting x1 one bit toward the most-significant bit,
+   721                        ; filling the vacated least-significant bit with zero.
+   722                        
+   723                                        HEADER  2,"2*",NORMAL
++  723                        WORD47:
++  723 00:035A: xx xx                        dw      WORD46
++  723 00:035C: 00 02 32 2A                  db      NORMAL,2,"2*"
++  723             0000002F   COUNT           set     COUNT+1
+   724                        TWO_STAR:
+   725 00:0360: 16 03                        asl     DSTACK+1,x              ; Multiply top value by two
+   726 00:0362: 4C xx xx                     jmp     NEXT                    ; Done
+   727                        
+   728                        ; 2/ ( x1 -- x2 )
+   729                        ;
+   730                        ; x2 is the result of shifting x1 one bit toward the least-significant bit,
+   731                        ; leaving the most-significant bit unchanged.
+   732                        
+   733                                        HEADER  2,"2/",NORMAL
++  733                        WORD48:
++  733 00:0365: xx xx                        dw      WORD47
++  733 00:0367: 00 02 32 2F                  db      NORMAL,2,"2/"
++  733             00000030   COUNT           set     COUNT+1
+   734                        TWO_SLASH:
+   735 00:036B: B5 03                        lda     DSTACK+1,x              ; Load the top value
+   736 00:036D: 2A                           rol     a                       ; Extract the top bit
+   737 00:036E: 76 03                        ror     DSTACK+1,x              ; And shift back into value
+   738 00:0370: 4C xx xx                     jmp     NEXT
+   739                        
+   740                        
+   741                        
+   742                        ; NEGATE ( n1 -- n2 )
+   743                        ;
+   744                        ; Negate n1, giving its arithmetic inverse n2.
+  Wed Aug 19 2015 17:12                                                                                                    Page 20
 
 
-   708                        ; (S") ( -- c-addr u )
-   709                        
-   710                        DO_S_QUOTE:
-   711 00:03B4: CA                           dex                             ; Reserve space for values
-   712 00:03B5: CA                           dex
-   713 00:03B6: CA                           dex
-   714 00:03B7: CA                           dex
-   715                                        short_a
-+  715 00:03B8: E2 20                        sep     #(1<<M_FLAG)
-+  715                                        longa   off
-   716 00:03BA: B9 00 00                     lda     0,y                     ; Fetch the length
-   717                                        long_a
-+  717 00:03BD: C2 20                        rep     #(1<<M_FLAG)
-+  717                                        longa   on
-   718 00:03BF: 29 FF 00                     and     #$00ff
-   719 00:03C2: 95 03                        sta     DSTACK+1,x
-   720 00:03C4: C8                           iny                             ; Save the text address
-   721 00:03C5: 94 05                        sty     DSTACK+3,x
-   722 00:03C7: 18                           clc                             ; And update IP
-   723 00:03C8: 75 05                        adc     DSTACK+3,X
-   724 00:03CA: A8                           tay
-   725 00:03CB: 4C xx xx                     jmp     NEXT                    ; Done
-   726                        
-   727                        ;==============================================================================
-   728                        ; I/O Operations
-   729                        ;------------------------------------------------------------------------------
-   730                        
-   731                        ; CR ( -- )
-   732                        ;
-   733                        ; Cause subsequent output to appear at the beginning of the next line.
-   734                        ;
-   735                        ; In this implementation it is defined as
-   736                        ;
-   737                        ;   13 EMIT 10 EMIT
-   738                        
-   739                                        HEADER  2,"CR",NORMAL,0
-+  739 00:03CE: 00 00                        dw      0
-+  739 00:03D0: 02 43 52 00                  db      2,"CR",NORMAL
-   740 00:03D4: 4C xx xx     CR:             jmp     DO_COLON
-   741 00:03D7: xx xx 0D 00                  dw      DO_LITERAL,13,EMIT
-       00:03DB: xx xx 
-   742 00:03DD: xx xx 0A 00                  dw      DO_LITERAL,10,EMIT
-       00:03E1: xx xx 
-   743 00:03E3: xx xx                        dw      EXIT
-   744                        
-   745                        ; EMIT ( x -- )
-   746                        ;
-   747                        ; If x is a graphic character in the implementation-defined character set,
-   748                        ; display x. The effect of EMIT for all other values of x is implementation
-   749                        ; -defined.
-   750                        
-   751                                        HEADER  4,"EMIT",NORMAL,CR
-+  751 00:03E5: xx xx                        dw      CR
-+  751 00:03E7: 04 45 4D 49                  db      4,"EMIT",NORMAL
-       00:03EB: 54 00 
-   752                                        extern  UartTx
-   753                        EMIT:
-   754 00:03ED: B5 03                        lda     DSTACK+1,X              ; Fetch character from stack
-  Tue Aug 18 2015  0:45                                                                                                    Page 19
+   745                        
+   746                                        HEADER  6,"NEGATE",NORMAL
++  746                        WORD49:
++  746 00:0373: xx xx                        dw      WORD48
++  746 00:0375: 00 06 4E 45                  db      NORMAL,6,"NEGATE"
+       00:0379: 47 41 54 45 
++  746             00000031   COUNT           set     COUNT+1
+   747                        NEGATE:
+   748 00:037D: 38                           sec
+   749 00:037E: A9 00 00                     lda     #0
+   750 00:0381: F5 03                        sbc     DSTACK+1,x
+   751 00:0383: 95 03                        sta     DSTACK+1,x
+   752 00:0385: 4C xx xx                     jmp     NEXT                    ; Done
+   753                        
+   754                        ;==============================================================================
+   755                        ; Mixed Arithmetic
+   756                        ;------------------------------------------------------------------------------
+   757                        
+   758                        ;==============================================================================
+   759                        ; Comparisons
+   760                        ;------------------------------------------------------------------------------
+   761                        
+   762                        ; 0< ( n -- flag )
+   763                        ;
+   764                        ; flag is true if and only if n is less than zero.
+   765                        
+   766                                        HEADER  2,"0<",NORMAL
++  766                        WORD50:
++  766 00:0388: xx xx                        dw      WORD49
++  766 00:038A: 00 02 30 3C                  db      NORMAL,2,"0<"
++  766             00000032   COUNT           set     COUNT+1
+   767                        ZERO_LESS:
+   768 00:038E: B5 03                        lda     DSTACK+1,x              ; Test top of stack
+   769 00:0390: 74 03                        stz     DSTACK+1,x              ; Assume false result
+   770 00:0392: 10 03                        bpl     $+5                     ; Was the value negative?
+   771 00:0394: D6 03                        dec     DSTACK+1,x              ; Yes, make true result
+   772 00:0396: 4C xx xx                     jmp     NEXT                    ; Done
+   773                        
+   774                        ; 0<> ( x -- flag )
+   775                        ;
+   776                        ; flag is true if and only if x is not equal to zero.
+   777                        
+   778                                        HEADER  3,"0<>",NORMAL
++  778                        WORD51:
++  778 00:0399: xx xx                        dw      WORD50
++  778 00:039B: 00 03 30 3C                  db      NORMAL,3,"0<>"
+       00:039F: 3E 
++  778             00000033   COUNT           set     COUNT+1
+   779                        ZERO_NOT_EQUAL:
+   780 00:03A0: B5 03                        lda     DSTACK+1,x              ; Test top of stack
+   781 00:03A2: 74 03                        stz     DSTACK+1,x              ; Assume false result
+   782 00:03A4: F0 03                        beq     $+5                     ; Was the value non-zero?
+   783 00:03A6: D6 03                        dec     DSTACK+1,x              ; Yes, make true result
+   784 00:03A8: 4C xx xx                     jmp     NEXT                    ; Done
+   785                        
+   786                        ; 0= ( x -- flag )
+   787                        ;
+   788                        ; flag is true if and only if x is equal to zero.
+  Wed Aug 19 2015 17:12                                                                                                    Page 21
 
 
-   755 00:03EF: 20 xx xx                     jsr     UartTx                  ; .. and transmit
-   756 00:03F2: E8                           inx                             ; Drop the character
-   757 00:03F3: E8                           inx
-   758 00:03F4: 4C xx xx                     jmp     NEXT                    ; Done
-   759                        
-   760                        ; KEY ( -- char )
-   761                        ;
-   762                        ; Receive one character char, a member of the implementation-defined character
-   763                        ; set. Keyboard events that do not correspond to such characters are discarded
-   764                        ; until a valid character is received, and those events are subsequently
-   765                        ; unavailable.
-   766                        ;
-   767                        ; All standard characters can be received. Characters received by KEY are not
-   768                        ; displayed.
-   769                        
-   770                                        HEADER  3,"KEY",NORMAL,EMIT
-+  770 00:03F7: xx xx                        dw      EMIT
-+  770 00:03F9: 03 4B 45 59                  db      3,"KEY",NORMAL
-       00:03FD: 00 
-   771                                        extern  UartRx
-   772                        KEY:
-   773 00:03FE: 20 xx xx                     jsr     UartRx                  ; Receive a character
-   774 00:0401: 29 FF 00                     and     #$00ff                  ; Ensure in ASCII range
-   775 00:0404: CA                           dex                             ; And push to stack
-   776 00:0405: CA                           dex
-   777 00:0406: 95 03                        sta     DSTACK+1,x
-   778 00:0408: 4C xx xx                     jmp     NEXT                    ; Done
-   779                        
-   780                        ; SPACE ( -- )
-   781                        ;
-   782                        ; Display one space.
-   783                        ;
-   784                        ; In this implementation it is defined as
-   785                        ;
-   786                        ;   SPACE EMIT
-   787                        
-   788                                        HEADER  5,"SPACE",NORMAL,KEY
-+  788 00:040B: xx xx                        dw      KEY
-+  788 00:040D: 05 53 50 41                  db      5,"SPACE",NORMAL
-       00:0411: 43 45 00 
-   789 00:0414: 4C xx xx     SPACE:          jmp     DO_COLON
-   790 00:0417: xx xx                        dw      BL
-   791 00:0419: xx xx                        dw      EMIT
-   792 00:041B: xx xx                        dw      EXIT
-   793                        
-   794                        ; SPACES ( n -- )
-   795                        ;
-   796                        ; If n is greater than zero, display n spaces.
-   797                        ;
-   798                        ; In this implementation it is defined as
+   789                        
+   790                                        HEADER  2,"0=",NORMAL
++  790                        WORD52:
++  790 00:03AB: xx xx                        dw      WORD51
++  790 00:03AD: 00 02 30 3D                  db      NORMAL,2,"0="
++  790             00000034   COUNT           set     COUNT+1
+   791                        ZERO_EQUAL:
+   792 00:03B1: B5 03                        lda     DSTACK+1,x              ; Test top of stack
+   793 00:03B3: 74 03                        stz     DSTACK+1,x              ; Assume false result
+   794 00:03B5: D0 03                        bne     $+5                     ; Was the value zero?
+   795 00:03B7: D6 03                        dec     DSTACK+1,x              ; Yes, make true result
+   796 00:03B9: 4C xx xx                     jmp     NEXT                    ; Done
+   797                        
+   798                        ; 0> ( n -- flag )
    799                        ;
-   800                        ;   BEGIN DUP 0> WHILE SPACE 1- REPEAT DROP
+   800                        ; flag is true if and only if n is greater than zero.
    801                        
-   802                                        HEADER  6,"SPACES",NORMAL,SPACE
-+  802 00:041D: xx xx                        dw      SPACE
-+  802 00:041F: 06 53 50 41                  db      6,"SPACES",NORMAL
-       00:0423: 43 45 53 00 
-   803 00:0427: 4C xx xx     SPACES:         jmp     DO_COLON
-  Tue Aug 18 2015  0:45                                                                                                    Page 20
-
-
-   804 00:042A: xx xx xx xx  SPACES_1:       dw      DUP,ZERO_GREATER,QUERY_BRANCH,SPACES_2
-       00:042E: xx xx xx xx 
-   805 00:0432: xx xx xx xx                  dw      SPACE,ONE_MINUS,BRANCH,SPACES_1
-       00:0436: xx xx xx xx 
-   806 00:043A: xx xx xx xx  SPACES_2:       dw      DROP,EXIT
-   807                        
-   808                        ; TYPE ( c-addr u -- )
-   809                        ;
-   810                        ; If u is greater than zero, display the character string specified by c-addr
-   811                        ; and u.
-   812                        ;
-   813                        ; In this implementation it is defined as
-   814                        ;
-   815                        ;   ?DUP IF
-   816                        ;     OVER + SWAP DO I C@ EMIT LOOP
-   817                        ;   ELSE DROP THEN
+   802                                        HEADER  2,"0>",NORMAL
++  802                        WORD53:
++  802 00:03BC: xx xx                        dw      WORD52
++  802 00:03BE: 00 02 30 3E                  db      NORMAL,2,"0>"
++  802             00000035   COUNT           set     COUNT+1
+   803                        ZERO_GREATER:
+   804 00:03C2: B5 03                        lda     DSTACK+1,x              ; Test top of stack
+   805 00:03C4: 74 03                        stz     DSTACK+1,x              ; Assume false result
+   806 00:03C6: 30 05                        bmi     $+7                     ; Was the value positive?
+   807 00:03C8: F0 03                        beq     $+5                     ; .. but not zero
+   808 00:03CA: D6 03                        dec     DSTACK+1,x              ; Yes, make true result
+   809 00:03CC: 4C xx xx                     jmp     NEXT                    ; Done
+   810                        
+   811                        ;==============================================================================
+   812                        ; Logical Operations
+   813                        ;------------------------------------------------------------------------------
+   814                        
+   815                        ; AND ( x1 x2 -- x3 )
+   816                        ;
+   817                        ; x3 is the bit-by-bit logical “and” of x1 with x2.
    818                        
-   819                                        HEADER  4,"TYPE",NORMAL,SPACES
-+  819 00:043E: xx xx                        dw      SPACES
-+  819 00:0440: 04 54 59 50                  db      4,"TYPE",NORMAL
-       00:0444: 45 00 
-   820 00:0446: 4C xx xx     TYPE:           jmp     DO_COLON
-   821 00:0449: xx xx xx xx                  dw      QUERY_DUP,QUERY_BRANCH,TYPE_2
-       00:044D: xx xx 
-   822 00:044F: xx xx xx xx                  dw      OVER,PLUS,SWAP,DO_DO
-       00:0453: xx xx xx xx 
-   823 00:0457: xx xx xx xx  TYPE_1:         dw      I,C_FETCH,EMIT,DO_LOOP,TYPE_1
-       00:045B: xx xx xx xx 
-       00:045F: xx xx 
-   824 00:0461: xx xx xx xx                  dw      BRANCH,TYPE_3
-   825 00:0465: xx xx        TYPE_2          dw      DROP
-   826 00:0467: xx xx        TYPE_3          dw      EXIT
+   819                                        HEADER  3,"AND",NORMAL
++  819                        WORD54:
++  819 00:03CF: xx xx                        dw      WORD53
++  819 00:03D1: 00 03 41 4E                  db      NORMAL,3,"AND"
+       00:03D5: 44 
++  819             00000036   COUNT           set     COUNT+1
+   820                        AND:
+   821 00:03D6: B5 03                        lda     DSTACK+1,x
+   822 00:03D8: 35 05                        and     DSTACK+3,x
+   823 00:03DA: 95 05                        sta     DSTACK+3,x
+   824 00:03DC: E8                           inx
+   825 00:03DD: E8                           inx
+   826 00:03DE: 4C xx xx                     jmp     NEXT
    827                        
-   828                        ;================================================================================
-   829                        ;--------------------------------------------------------------------------------
-   830                        
-   831                                        end
+   828                        ; INVERT ( x -- !x )
+   829                        
+   830                                        HEADER  6,"INVERT",NORMAL
++  830                        WORD55:
++  830 00:03E1: xx xx                        dw      WORD54
++  830 00:03E3: 00 06 49 4E                  db      NORMAL,6,"INVERT"
+  Wed Aug 19 2015 17:12                                                                                                    Page 22
 
 
-      Lines assembled: 1074
+       00:03E7: 56 45 52 54 
++  830             00000037   COUNT           set     COUNT+1
+   831                        INVERT:
+   832 00:03EB: B5 03                        lda     DSTACK+1,x              ; Fetch top value
+   833 00:03ED: 49 FF FF                     eor     #$ffff                  ; Invert all the bits
+   834 00:03F0: 95 03                        sta     DSTACK+1,x              ; And write back
+   835 00:03F2: 4C xx xx                     jmp     NEXT                    ; Done
+   836                        
+   837                        ; AND ( x1 x2 -- x3 )
+   838                        
+   839                                        HEADER  2,"OR",NORMAL
++  839                        WORD56:
++  839 00:03F5: xx xx                        dw      WORD55
++  839 00:03F7: 00 02 4F 52                  db      NORMAL,2,"OR"
++  839             00000038   COUNT           set     COUNT+1
+   840                        OR:
+   841 00:03FB: B5 03                        lda     DSTACK+1,x
+   842 00:03FD: 15 05                        ora     DSTACK+3,x
+   843 00:03FF: 95 05                        sta     DSTACK+3,x
+   844 00:0401: E8                           inx
+   845 00:0402: E8                           inx
+   846 00:0403: 4C xx xx                     jmp     NEXT
+   847                        
+   848                        ; XOR ( x1 x2 -- x3 )
+   849                        
+   850                                        HEADER  3,"XOR",NORMAL
++  850                        WORD57:
++  850 00:0406: xx xx                        dw      WORD56
++  850 00:0408: 00 03 58 4F                  db      NORMAL,3,"XOR"
+       00:040C: 52 
++  850             00000039   COUNT           set     COUNT+1
+   851                        XOR:
+   852 00:040D: B5 03                        lda     DSTACK+1,x
+   853 00:040F: 55 05                        eor     DSTACK+3,x
+   854 00:0411: 95 05                        sta     DSTACK+3,x
+   855 00:0413: E8                           inx
+   856 00:0414: E8                           inx
+   857 00:0415: 4C xx xx                     jmp     NEXT
+   858                        
+   859                        ;==============================================================================
+   860                        ; Control Words
+   861                        ;------------------------------------------------------------------------------
+   862                        
+   863                        ; ABORT ( i*x -- ) ( R: j*x -- )
+   864                        ;
+   865                        ; Empty the data stack and perform the function of QUIT, which includes
+   866                        ; emptying the return stack, without displaying a message.
+   867                        
+   868                                        HEADER  5,"ABORT",NORMAL
++  868                        WORD58:
++  868 00:0418: xx xx                        dw      WORD57
++  868 00:041A: 00 05 41 42                  db      NORMAL,5,"ABORT"
+       00:041E: 4F 52 54 
++  868             0000003A   COUNT           set     COUNT+1
+   869 00:0421: 4C xx xx     ABORT:          jmp     DO_COLON
+   870 00:0424: xx xx                        dw      DO_ABORT
+   871 00:0426: xx xx                        dw      QUIT
+   872                        
+  Wed Aug 19 2015 17:12                                                                                                    Page 23
+
+
+   873                        DO_ABORT:
+   874 00:0428: A2 81 00                     ldx     #DSTACK_INIT
+   875 00:042B: 4C xx xx                     jmp     NEXT
+   876                        
+   877                        ; EXIT ( -- ) ( R: nest-sys -- )
+   878                        
+   879                                        HEADER  4,"EXIT",NORMAL
++  879                        WORD59:
++  879 00:042E: xx xx                        dw      WORD58
++  879 00:0430: 00 04 45 58                  db      NORMAL,4,"EXIT"
+       00:0434: 49 54 
++  879             0000003B   COUNT           set     COUNT+1
+   880                        EXIT:
+   881 00:0436: 7A                           ply
+   882 00:0437: 4C xx xx                     jmp     NEXT
+   883                        
+   884                        ; QUIT ( -- ) ( R: i*x -- )
+   885                        ;
+   886                        ; Empty the return stack, store zero in SOURCE-ID if it is present, make the
+   887                        ; user input device the input source, and enter interpretation state. Do not
+   888                        ; display a message. Repeat the following:
+   889                        ; – Accept a line from the input source into the input buffer, set >IN to zero,
+   890                        ;   and interpret.
+   891                        ; – Display the implementation-defined system prompt if in interpretation state,
+   892                        ;   all processing has been completed, and no ambiguous condition exists.
+   893                        ;
+   894                        ; In this implementation it is defined as:
+   895                        ;
+   896                        ;   DO_QUIT 0 STATE !
+   897                        ;   BEGIN
+   898                        ;       REFILL
+   899                        ;       WHILE SOURCE EVALUATE
+   900                        ;       STATE @ 0= IF CR S" OK" THEN
+   901                        ;   AGAIN ;
+   902                        
+   903                                        HEADER  4,"QUIT",NORMAL
++  903                        WORD60:
++  903 00:043A: xx xx                        dw      WORD59
++  903 00:043C: 00 04 51 55                  db      NORMAL,4,"QUIT"
+       00:0440: 49 54 
++  903             0000003C   COUNT           set     COUNT+1
+   904 00:0442: 4C xx xx     QUIT:           jmp     DO_COLON
+   905 00:0445: xx xx                        dw      DO_QUIT
+   906 00:0447: xx xx xx xx                  dw      ZERO,STATE,STORE
+       00:044B: xx xx 
+   907                        
+   908                        DO_QUIT:
+   909 00:044D: A9 FF 01                     lda     #RSTACK_INIT            ; Reset the return stack
+   910 00:0450: 1B                           tcs
+   911 00:0451: 4C xx xx                     jmp     NEXT                    ; Done
+   912                        
+   913                        ;==============================================================================
+   914                        ; Compiling Words
+   915                        ;------------------------------------------------------------------------------
+   916                        
+   917                                        HEADER  10,"(CONSTANT)",NORMAL
++  917                        WORD61:
++  917 00:0454: xx xx                        dw      WORD60
+  Wed Aug 19 2015 17:12                                                                                                    Page 24
+
+
++  917 00:0456: 00 0A 28 43                  db      NORMAL,10,"(CONSTANT)"
+       00:045A: 4F 4E 53 54 
+       00:045E: 41 4E 54 29 
++  917             0000003D   COUNT           set     COUNT+1
+   918                        DO_CONSTANT:
+   919 00:0462: 5A                           phy                             ; Save IP
+   920 00:0463: A8                           tay                             ; Fetch constant after WA
+   921 00:0464: B9 03 00                     lda     3,y
+   922 00:0467: CA                           dex                             ; And push
+   923 00:0468: CA                           dex
+   924 00:0469: 95 03                        sta     DSTACK+1,x
+   925 00:046B: 7A                           ply
+   926 00:046C: 4C xx xx                     jmp     NEXT                    ; Done
+   927                        
+   928                                        HEADER  4,"(DO)",NORMAL
++  928                        WORD62:
++  928 00:046F: xx xx                        dw      WORD61
++  928 00:0471: 00 04 28 44                  db      NORMAL,4,"(DO)"
+       00:0475: 4F 29 
++  928             0000003E   COUNT           set     COUNT+1
+   929                        DO_DO:
+   930 00:0477: B5 05                        lda     DSTACK+3,x
+   931 00:0479: 48                           pha
+   932 00:047A: B5 03                        lda     DSTACK+1,x
+   933 00:047C: 48                           pha
+   934 00:047D: E8                           inx
+   935 00:047E: E8                           inx
+   936 00:047F: E8                           inx
+   937 00:0480: E8                           inx
+   938 00:0481: 4C xx xx                     jmp     NEXT
+   939                        
+   940                                        HEADER  10,"(LITERAL)",NORMAL
++  940                        WORD63:
++  940 00:0484: xx xx                        dw      WORD62
++  940 00:0486: 00 0A 28 4C                  db      NORMAL,10,"(LITERAL)"
+       00:048A: 49 54 45 52 
+       00:048E: 41 4C 29 
++  940             0000003F   COUNT           set     COUNT+1
+   941                        DO_LITERAL:
+   942 00:0491: B9 00 00                     lda     0,y                     ; Fetch constant from IP
+   943 00:0494: C8                           iny
+   944 00:0495: C8                           iny
+   945 00:0496: CA                           dex                             ; And push
+   946 00:0497: CA                           dex
+   947 00:0498: 95 03                        sta     DSTACK+1,x
+   948 00:049A: 4C xx xx                     jmp     NEXT                    ; Done
+   949                        
+   950                                        HEADER  6,"(LOOP)",NORMAL
++  950                        WORD64:
++  950 00:049D: xx xx                        dw      WORD63
++  950 00:049F: 00 06 28 4C                  db      NORMAL,6,"(LOOP)"
+       00:04A3: 4F 4F 50 29 
++  950             00000040   COUNT           set     COUNT+1
+   951                        DO_LOOP
+   952 00:04A7: A3 01                        lda     1,s                     ; Add one to loop counter
+   953 00:04A9: 1A                           inc     a
+   954 00:04AA: 83 01                        sta     1,s
+   955 00:04AC: C3 03                        cmp     3,s
+  Wed Aug 19 2015 17:12                                                                                                    Page 25
+
+
+   956                        
+   957 00:04AE: 4C xx xx                     jmp     NEXT
+   958                        
+   959                                        HEADER  6,"(USER)",NORMAL
++  959                        WORD65:
++  959 00:04B1: xx xx                        dw      WORD64
++  959 00:04B3: 00 06 28 55                  db      NORMAL,6,"(USER)"
+       00:04B7: 53 45 52 29 
++  959             00000041   COUNT           set     COUNT+1
+   960                        DO_USER:
+   961 00:04BB: 5A                           phy                             ; Save the IP
+   962 00:04BC: A8                           tay                             ; Fetch offset after WA
+   963 00:04BD: B9 03 00                     lda     3,y
+   964 00:04C0: 18                           clc                             ; Work out address in user area
+   965 00:04C1: 69 10 02                     adc     #USER_AREA
+   966 00:04C4: CA                           dex                             ; Push on data stack
+   967 00:04C5: CA                           dex
+   968 00:04C6: 95 03                        sta     DSTACK+1,x
+   969 00:04C8: 7A                           ply                             ; Restore IP
+   970 00:04C9: 4C xx xx                     jmp     NEXT                    ; Done
+   971                        
+   972                                        HEADER  10,"(VARIABLE)",NORMAL
++  972                        WORD66:
++  972 00:04CC: xx xx                        dw      WORD65
++  972 00:04CE: 00 0A 28 56                  db      NORMAL,10,"(VARIABLE)"
+       00:04D2: 41 52 49 41 
+       00:04D6: 42 4C 45 29 
++  972             00000042   COUNT           set     COUNT+1
+   973                        DO_VARIABLE:
+   974                        
+   975                        
+   976                        ; : ()
+   977                        
+   978                                        HEADER  1,":",IMMEDIATE
++  978                        WORD67:
++  978 00:04DA: xx xx                        dw      WORD66
++  978 00:04DC: 80 01 3A                     db      IMMEDIATE,1,":"
++  978             00000043   COUNT           set     COUNT+1
+   979                        COLON:
+   980                        
+   981                        
+   982                        DO_COLON:
+   983 00:04DF: 5A                           phy                             ; Save the instruction pointer
+   984 00:04E0: A8                           tay                             ; Calculate the new IP
+   985 00:04E1: C8                           iny
+   986 00:04E2: C8                           iny
+   987 00:04E3: C8                           iny
+   988                        NEXT:
+   989 00:04E4: B9 00 00                     lda     0,y                     ; Fetch the next word address
+   990 00:04E7: 85 00                        sta     WA
+   991 00:04E9: C8                           iny                             ; Bump the instruction pointer
+   992 00:04EA: C8                           iny
+   993 00:04EB: 6C 00 00                     jmp     (!WA)                   ; And execute word
+   994                        
+   995                        
+   996                                        HEADER  8,"CONSTANT",IMMEDIATE
++  996                        WORD68:
++  996 00:04EE: xx xx                        dw      WORD67
+  Wed Aug 19 2015 17:12                                                                                                    Page 26
+
+
++  996 00:04F0: 80 08 43 4F                  db      IMMEDIATE,8,"CONSTANT"
+       00:04F4: 4E 53 54 41 
+       00:04F8: 4E 54 
++  996             00000044   COUNT           set     COUNT+1
+   997                        CONSTANT:
+   998                        
+   999                        
+  1000                        
+  1001                                        HEADER  2,"IF",IMMEDIATE
++ 1001                        WORD69:
++ 1001 00:04FA: xx xx                        dw      WORD68
++ 1001 00:04FC: 80 02 49 46                  db      IMMEDIATE,2,"IF"
++ 1001             00000045   COUNT           set     COUNT+1
+  1002                        IF:
+  1003                        
+  1004                        
+  1005                        
+  1006                                        HEADER  2,"S""",IMMEDIATE
++ 1006                        WORD70:
++ 1006 00:0500: xx xx                        dw      WORD69
++ 1006 00:0502: 80 02 53 22                  db      IMMEDIATE,2,"S"""
++ 1006             00000046   COUNT           set     COUNT+1
+  1007                        S_QUOTE:
+  1008                        
+  1009                        ; (S") ( -- c-addr u )
+  1010                        
+  1011                        DO_S_QUOTE:
+  1012 00:0506: CA                           dex                             ; Reserve space for values
+  1013 00:0507: CA                           dex
+  1014 00:0508: CA                           dex
+  1015 00:0509: CA                           dex
+  1016                                        short_a
++ 1016 00:050A: E2 20                        sep     #(1<<M_FLAG)
++ 1016                                        longa   off
+  1017 00:050C: B9 00 00                     lda     0,y                     ; Fetch the length
+  1018                                        long_a
++ 1018 00:050F: C2 20                        rep     #(1<<M_FLAG)
++ 1018                                        longa   on
+  1019 00:0511: 29 FF 00                     and     #$00ff
+  1020 00:0514: 95 03                        sta     DSTACK+1,x
+  1021 00:0516: C8                           iny                             ; Save the text address
+  1022 00:0517: 94 05                        sty     DSTACK+3,x
+  1023 00:0519: 18                           clc                             ; And update IP
+  1024 00:051A: 75 05                        adc     DSTACK+3,X
+  1025 00:051C: A8                           tay
+  1026 00:051D: 4C xx xx                     jmp     NEXT                    ; Done
+  1027                        
+  1028                        ;==============================================================================
+  1029                        ; I/O Operations
+  1030                        ;------------------------------------------------------------------------------
+  1031                        
+  1032                        ; CR ( -- )
+  1033                        ;
+  1034                        ; Cause subsequent output to appear at the beginning of the next line.
+  1035                        ;
+  1036                        ; In this implementation it is defined as
+  1037                        ;
+  1038                        ;   13 EMIT 10 EMIT
+  Wed Aug 19 2015 17:12                                                                                                    Page 27
+
+
+  1039                        
+  1040                                        HEADER  2,"CR",NORMAL
++ 1040                        WORD71:
++ 1040 00:0520: xx xx                        dw      WORD70
++ 1040 00:0522: 00 02 43 52                  db      NORMAL,2,"CR"
++ 1040             00000047   COUNT           set     COUNT+1
+  1041 00:0526: 4C xx xx     CR:             jmp     DO_COLON
+  1042 00:0529: xx xx 0D 00                  dw      DO_LITERAL,13,EMIT
+       00:052D: xx xx 
+  1043 00:052F: xx xx 0A 00                  dw      DO_LITERAL,10,EMIT
+       00:0533: xx xx 
+  1044 00:0535: xx xx                        dw      EXIT
+  1045                        
+  1046                        ; EMIT ( x -- )
+  1047                        ;
+  1048                        ; If x is a graphic character in the implementation-defined character set,
+  1049                        ; display x. The effect of EMIT for all other values of x is implementation
+  1050                        ; -defined.
+  1051                        
+  1052                                        HEADER  4,"EMIT",NORMAL
++ 1052                        WORD72:
++ 1052 00:0537: xx xx                        dw      WORD71
++ 1052 00:0539: 00 04 45 4D                  db      NORMAL,4,"EMIT"
+       00:053D: 49 54 
++ 1052             00000048   COUNT           set     COUNT+1
+  1053                                        extern  UartTx
+  1054                        EMIT:
+  1055 00:053F: B5 03                        lda     DSTACK+1,X              ; Fetch character from stack
+  1056 00:0541: 20 xx xx                     jsr     UartTx                  ; .. and transmit
+  1057 00:0544: E8                           inx                             ; Drop the character
+  1058 00:0545: E8                           inx
+  1059 00:0546: 4C xx xx                     jmp     NEXT                    ; Done
+  1060                        
+  1061                        ; KEY ( -- char )
+  1062                        ;
+  1063                        ; Receive one character char, a member of the implementation-defined character
+  1064                        ; set. Keyboard events that do not correspond to such characters are discarded
+  1065                        ; until a valid character is received, and those events are subsequently
+  1066                        ; unavailable.
+  1067                        ;
+  1068                        ; All standard characters can be received. Characters received by KEY are not
+  1069                        ; displayed.
+  1070                        
+  1071                                        HEADER  3,"KEY",NORMAL
++ 1071                        WORD73:
++ 1071 00:0549: xx xx                        dw      WORD72
++ 1071 00:054B: 00 03 4B 45                  db      NORMAL,3,"KEY"
+       00:054F: 59 
++ 1071             00000049   COUNT           set     COUNT+1
+  1072                                        extern  UartRx
+  1073                        KEY:
+  1074 00:0550: 20 xx xx                     jsr     UartRx                  ; Receive a character
+  1075 00:0553: 29 FF 00                     and     #$00ff                  ; Ensure in ASCII range
+  1076 00:0556: CA                           dex                             ; And push to stack
+  1077 00:0557: CA                           dex
+  1078 00:0558: 95 03                        sta     DSTACK+1,x
+  1079 00:055A: 4C xx xx                     jmp     NEXT                    ; Done
+  1080                        
+  Wed Aug 19 2015 17:12                                                                                                    Page 28
+
+
+  1081                        ; SOURCE ( -- c-addr u )
+  1082                        ;
+  1083                        ; c-addr is the address of, and u is the number of characters in, the input
+  1084                        ; buffer.
+  1085                        ;
+  1086                        ; In this implementation it is defined as
+  1087                        ;
+  1088                        ;   TIB #TIB @
+  1089                        
+  1090                                        HEADER  6,"SOURCE",NORMAL
++ 1090                        WORD74:
++ 1090 00:055D: xx xx                        dw      WORD73
++ 1090 00:055F: 00 06 53 4F                  db      NORMAL,6,"SOURCE"
+       00:0563: 55 52 43 45 
++ 1090             0000004A   COUNT           set     COUNT+1
+  1091 00:0567: 4C xx xx     SOURCE:         jmp     DO_COLON
+  1092 00:056A: xx xx                        dw      TIB
+  1093 00:056C: xx xx xx xx                  dw      HASH_TIB,FETCH
+  1094 00:0570: xx xx                        dw      EXIT
+  1095                        
+  1096                        ; SPACE ( -- )
+  1097                        ;
+  1098                        ; Display one space.
+  1099                        ;
+  1100                        ; In this implementation it is defined as
+  1101                        ;
+  1102                        ;   SPACE EMIT
+  1103                        
+  1104                                        HEADER  5,"SPACE",NORMAL
++ 1104                        WORD75:
++ 1104 00:0572: xx xx                        dw      WORD74
++ 1104 00:0574: 00 05 53 50                  db      NORMAL,5,"SPACE"
+       00:0578: 41 43 45 
++ 1104             0000004B   COUNT           set     COUNT+1
+  1105 00:057B: 4C xx xx     SPACE:          jmp     DO_COLON
+  1106 00:057E: xx xx                        dw      BL
+  1107 00:0580: xx xx                        dw      EMIT
+  1108 00:0582: xx xx                        dw      EXIT
+  1109                        
+  1110                        ; SPACES ( n -- )
+  1111                        ;
+  1112                        ; If n is greater than zero, display n spaces.
+  1113                        ;
+  1114                        ; In this implementation it is defined as
+  1115                        ;
+  1116                        ;   BEGIN DUP 0> WHILE SPACE 1- REPEAT DROP
+  1117                        
+  1118                                        HEADER  6,"SPACES",NORMAL
++ 1118                        WORD76:
++ 1118 00:0584: xx xx                        dw      WORD75
++ 1118 00:0586: 00 06 53 50                  db      NORMAL,6,"SPACES"
+       00:058A: 41 43 45 53 
++ 1118             0000004C   COUNT           set     COUNT+1
+  1119 00:058E: 4C xx xx     SPACES:         jmp     DO_COLON
+  1120 00:0591: xx xx xx xx  SPACES_1:       dw      DUP,ZERO_GREATER,QUERY_BRANCH,SPACES_2
+       00:0595: xx xx xx xx 
+  1121 00:0599: xx xx xx xx                  dw      SPACE,ONE_MINUS,BRANCH,SPACES_1
+       00:059D: xx xx xx xx 
+  Wed Aug 19 2015 17:12                                                                                                    Page 29
+
+
+  1122 00:05A1: xx xx xx xx  SPACES_2:       dw      DROP,EXIT
+  1123                        
+  1124                        ; TYPE ( c-addr u -- )
+  1125                        ;
+  1126                        ; If u is greater than zero, display the character string specified by c-addr
+  1127                        ; and u.
+  1128                        ;
+  1129                        ; In this implementation it is defined as
+  1130                        ;
+  1131                        ;   ?DUP IF
+  1132                        ;     OVER + SWAP DO I C@ EMIT LOOP
+  1133                        ;   ELSE DROP THEN
+  1134                        
+  1135                                        HEADER  4,"TYPE",NORMAL
++ 1135                        WORD77:
++ 1135 00:05A5: xx xx                        dw      WORD76
++ 1135 00:05A7: 00 04 54 59                  db      NORMAL,4,"TYPE"
+       00:05AB: 50 45 
++ 1135             0000004D   COUNT           set     COUNT+1
+  1136 00:05AD: 4C xx xx     TYPE:           jmp     DO_COLON
+  1137 00:05B0: xx xx xx xx                  dw      QUERY_DUP,QUERY_BRANCH,TYPE_2
+       00:05B4: xx xx 
+  1138 00:05B6: xx xx xx xx                  dw      OVER,PLUS,SWAP,DO_DO
+       00:05BA: xx xx xx xx 
+  1139 00:05BE: xx xx xx xx  TYPE_1:         dw      I,C_FETCH,EMIT,DO_LOOP,TYPE_1
+       00:05C2: xx xx xx xx 
+       00:05C6: xx xx 
+  1140 00:05C8: xx xx xx xx                  dw      BRANCH,TYPE_3
+  1141 00:05CC: xx xx        TYPE_2          dw      DROP
+  1142 00:05CE: xx xx        TYPE_3          dw      EXIT
+  1143                        
+  1144                        ;================================================================================
+  1145                        ;--------------------------------------------------------------------------------
+  1146                        
+  1147                        NEXT_WORD:
+  1148                        
+  1149                                        end
+
+
+      Lines assembled: 1578
       Errors: 0
