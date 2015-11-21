@@ -1,4 +1,4 @@
-  Mon Aug 24 2015 23:34                                                                                                    Page 1
+  Thu Nov 19 2015 21:53                                                                                                    Page 1
 
 
                                                ***************************************
@@ -59,7 +59,7 @@
      9                        ;------------------------------------------------------------------------------
     10                        ; Copyright (C)2015 HandCoded Software Ltd.
     11                        ; All rights reserved.
-  Mon Aug 24 2015 23:34                                                                                                    Page 2
+  Thu Nov 19 2015 21:53                                                                                                    Page 2
 
 
     12                        ;
@@ -120,7 +120,7 @@
     67                        ; Resets the X bit making the index registers 16-bits wide
     68                        
     69                        long_i          macro
-  Mon Aug 24 2015 23:34                                                                                                    Page 3
+  Thu Nov 19 2015 21:53                                                                                                    Page 3
 
 
     70                                        rep     #(1<<X_FLAG)
@@ -181,7 +181,7 @@
     62                                        endm
     63                        
     64                        ;==============================================================================
-  Mon Aug 24 2015 23:34                                                                                                    Page 4
+  Thu Nov 19 2015 21:53                                                                                                    Page 4
 
 
     65                        ; Definitions
@@ -242,7 +242,7 @@
    120 00:040E: 4C F5 0C                     jmp     NEXT
    121                        
    122                        COLD:
-  Mon Aug 24 2015 23:34                                                                                                    Page 5
+  Thu Nov 19 2015 21:53                                                                                                    Page 5
 
 
    123 00:0411: 40 05                        dw      DECIMAL
@@ -252,7 +252,7 @@
        00:041D: 66 05 
    126 00:041F: 6E 0E 6E 0E                  dw      CR,CR,DO_S_QUOTE
        00:0423: 4E 0E 
-   127 00:0425: 23 48 61 6E                  db      35,"HandCoded W65C816 ANS-Forth [15.08]"
+   127 00:0425: 23 48 61 6E                  db      35,"HandCoded W65C816 ANS-Forth [15.11]"
        00:0429: 64 43 6F 64 
        00:042D: 65 64 20 57 
        00:0431: 36 35 43 38 
@@ -260,7 +260,7 @@
        00:0439: 4E 53 2D 46 
        00:043D: 6F 72 74 68 
        00:0441: 20 5B 31 35 
-       00:0445: 2E 30 38 5D 
+       00:0445: 2E 31 31 5D 
    128 00:0449: E0 0E                        dw      TYPE
    129 00:044B: E4 09                        dw      ABORT
    130                        
@@ -303,7 +303,7 @@
    165                        
    166                        ; BLK ( -- a-addr )
    167                        ;
-  Mon Aug 24 2015 23:34                                                                                                    Page 6
+  Thu Nov 19 2015 21:53                                                                                                    Page 6
 
 
    168                        ; a-addr is the address of a cell containing zero or the number of the mass-
@@ -364,7 +364,7 @@
    218 00:04C9: BD 04 00                     HEADER  NORMAL
    219 00:04CC: 0B 28 53 4F                  db      11,"(SOURCE-ID)"
        00:04D0: 55 52 43 45 
-  Mon Aug 24 2015 23:34                                                                                                    Page 7
+  Thu Nov 19 2015 21:53                                                                                                    Page 7
 
 
        00:04D4: 2D 49 44 29 
@@ -425,7 +425,7 @@
    273                        ;
    274                        ; Return a false flag.
    275                        
-  Mon Aug 24 2015 23:34                                                                                                    Page 8
+  Thu Nov 19 2015 21:53                                                                                                    Page 8
 
 
    276 00:0513: 03 05 00                     HEADER  NORMAL
@@ -486,7 +486,7 @@
    326                        ;
    327                        ; Store x at a-addr.
    328                        
-  Mon Aug 24 2015 23:34                                                                                                    Page 9
+  Thu Nov 19 2015 21:53                                                                                                    Page 9
 
 
    329 00:0561: 4D 05 00                     HEADER  NORMAL
@@ -547,7 +547,7 @@
    383                        
    384 00:05A6: 90 05 00                     HEADER  NORMAL
    385 00:05A9: 02 32 21                     db      2,"2!"
-  Mon Aug 24 2015 23:34                                                                                                    Page 10
+  Thu Nov 19 2015 21:53                                                                                                    Page 10
 
 
    386                        TWO_STORE:
@@ -608,7 +608,7 @@
    440 00:05F1: 42 0A                        dw      EXIT
    441                        
    442                        ; C! ( char c-addr -- )
-  Mon Aug 24 2015 23:34                                                                                                    Page 11
+  Thu Nov 19 2015 21:53                                                                                                    Page 11
 
 
    443                        ;
@@ -669,7 +669,7 @@
    497                        
    498                        ; HERE
    499                        
-  Mon Aug 24 2015 23:34                                                                                                    Page 12
+  Thu Nov 19 2015 21:53                                                                                                    Page 12
 
 
    500 00:063D: 24 06 00                     HEADER  NORMAL
@@ -730,7 +730,7 @@
    550                        ;
    551                        ; Add the size in address units of a character to c-addr1, giving c-addr2.
    552                        
-  Mon Aug 24 2015 23:34                                                                                                    Page 13
+  Thu Nov 19 2015 21:53                                                                                                    Page 13
 
 
    553 00:0686: 78 06 00                     HEADER  NORMAL
@@ -791,7 +791,7 @@
    604                        
    605 00:06C5: B0 06 00                     HEADER  NORMAL
    606 00:06C8: 05 32 4F 56                  db      5,"2OVER"
-  Mon Aug 24 2015 23:34                                                                                                    Page 14
+  Thu Nov 19 2015 21:53                                                                                                    Page 14
 
 
        00:06CC: 45 52 
@@ -852,7 +852,7 @@
    659 00:0712: 04 44 52 4F                  db      4,"DROP"
        00:0716: 50 
    660                        DROP:
-  Mon Aug 24 2015 23:34                                                                                                    Page 15
+  Thu Nov 19 2015 21:53                                                                                                    Page 15
 
 
    661 00:0717: E8                           inx                             ; Drop the top value
@@ -913,7 +913,7 @@
    714 00:075A: 95 03                        sta     DSTACK+1,x              ; .. and top
    715 00:075C: 68                           pla                             ; Recover top
    716 00:075D: 95 05                        sta     DSTACK+3,x              ; .. and save as second
-  Mon Aug 24 2015 23:34                                                                                                    Page 16
+  Thu Nov 19 2015 21:53                                                                                                    Page 16
 
 
    717 00:075F: 4C F5 0C                     jmp     NEXT                    ; Done
@@ -974,7 +974,7 @@
    771 00:0798: 4C F5 0C                     jmp     NEXT                    ; Done
    772                        
    773                        ; 2R@ ( -- x1 x2 ) ( R: x1 x2 -- x1 x2 )
-  Mon Aug 24 2015 23:34                                                                                                    Page 17
+  Thu Nov 19 2015 21:53                                                                                                    Page 17
 
 
    774                        ;
@@ -1035,7 +1035,7 @@
    829 00:07D5: CA                           dex
    830 00:07D6: 95 03                        sta     DSTACK+1,x
    831 00:07D8: 4C F5 0C                     jmp     NEXT
-  Mon Aug 24 2015 23:34                                                                                                    Page 18
+  Thu Nov 19 2015 21:53                                                                                                    Page 18
 
 
    832                        
@@ -1096,7 +1096,7 @@
    887                        
    888                        ; */
    889                        ; */MOD
-  Mon Aug 24 2015 23:34                                                                                                    Page 19
+  Thu Nov 19 2015 21:53                                                                                                    Page 19
 
 
    890                        
@@ -1157,7 +1157,7 @@
    945                        ; 2* ( x1 -- x2 )
    946                        ;
    947                        ; x2 is the result of shifting x1 one bit toward the most-significant bit,
-  Mon Aug 24 2015 23:34                                                                                                    Page 20
+  Thu Nov 19 2015 21:53                                                                                                    Page 20
 
 
    948                        ; filling the vacated least-significant bit with zero.
@@ -1218,7 +1218,7 @@
   1002 00:0892: 7D 08 00                     HEADER  NORMAL
   1003 00:0895: 04 55 4D 41                  db      4,"UMAX"
        00:0899: 58 
-  Mon Aug 24 2015 23:34                                                                                                    Page 21
+  Thu Nov 19 2015 21:53                                                                                                    Page 21
 
 
   1004                        UMAX:
@@ -1279,7 +1279,7 @@
   1058 00:08D1: 34 05                        bit     DSTACK+3,x              ; Test the number
   1059 00:08D3: 10 02                        bpl     S_TO_D_1
   1060 00:08D5: D6 03                        dec     DSTACK+1,x              ; Make top -1 if negative
-  Mon Aug 24 2015 23:34                                                                                                    Page 22
+  Thu Nov 19 2015 21:53                                                                                                    Page 22
 
 
   1061 00:08D7: 4C F5 0C     S_TO_D_1        jmp     NEXT                    ; Done
@@ -1340,7 +1340,7 @@
   1116 00:091A: F0 03                        beq     $+5                     ; .. but not zero
   1117 00:091C: D6 03                        dec     DSTACK+1,x              ; Yes, make true result
   1118 00:091E: 4C F5 0C                     jmp     NEXT                    ; Done
-  Mon Aug 24 2015 23:34                                                                                                    Page 23
+  Thu Nov 19 2015 21:53                                                                                                    Page 23
 
 
   1119                        
@@ -1401,7 +1401,7 @@
   1174                        
   1175                        ; INVERT ( x1 -- x2 )
   1176                        ;
-  Mon Aug 24 2015 23:34                                                                                                    Page 24
+  Thu Nov 19 2015 21:53                                                                                                    Page 24
 
 
   1177                        ; Invert all bits of x1, giving its logical inverse x2.
@@ -1462,7 +1462,7 @@
   1230                        
   1231 00:09A5: 94 09 00                     HEADER  NORMAL
   1232 00:09A8: 06 52 53 48                  db      6,"RSHIFT"
-  Mon Aug 24 2015 23:34                                                                                                    Page 25
+  Thu Nov 19 2015 21:53                                                                                                    Page 25
 
 
        00:09AC: 49 46 54 
@@ -1523,7 +1523,7 @@
   1286 00:09F1: DB 09 00                     HEADER  NORMAL
   1287 00:09F4: 07 28 42 55                  db      7,"(BUILD)"
        00:09F8: 49 4C 44 29 
-  Mon Aug 24 2015 23:34                                                                                                    Page 26
+  Thu Nov 19 2015 21:53                                                                                                    Page 26
 
 
   1288 00:09FC: 4C F0 0C     BUILD:          jmp     DO_COLON
@@ -1584,7 +1584,7 @@
   1337                        ;   all processing has been completed, and no ambiguous condition exists.
   1338                        ;
   1339                        ; In this implementation it is defined as:
-  Mon Aug 24 2015 23:34                                                                                                    Page 27
+  Thu Nov 19 2015 21:53                                                                                                    Page 27
 
 
   1340                        ;
@@ -1645,7 +1645,7 @@
   1389                        ; Input terminates when an implementation-defined line terminator is received.
   1390                        ; When input terminates, nothing is appended to the string, and the display is
   1391                        ; maintained in an implementation-defined way.
-  Mon Aug 24 2015 23:34                                                                                                    Page 28
+  Thu Nov 19 2015 21:53                                                                                                    Page 28
 
 
   1392                        ;
@@ -1706,7 +1706,7 @@
   1434                        ;   RESTORE-INPUT DROP
   1435                        
   1436 00:0AF5: 90 0A 00                     HEADER  NORMAL
-  Mon Aug 24 2015 23:34                                                                                                    Page 29
+  Thu Nov 19 2015 21:53                                                                                                    Page 29
 
 
   1437 00:0AF8: 08 45 56 41                  db      8,"EVALUATE"
@@ -1767,7 +1767,7 @@
        00:0B72: BE 0D 3F 00 
        00:0B76: 87 0E 6E 0E 
        00:0B7A: E4 09 
-  Mon Aug 24 2015 23:34                                                                                                    Page 30
+  Thu Nov 19 2015 21:53                                                                                                    Page 30
 
 
   1478 00:0B7C: 7A 0D 34 0B  INTERPRET_6     dw      BRANCH,INTERPRET_1
@@ -1828,7 +1828,7 @@
   1532 00:0B91: 84 0B 00                     HEADER  NORMAL
   1533 00:0B94: 06 52 45 46                  db      6,"REFILL"
        00:0B98: 49 4C 4C 
-  Mon Aug 24 2015 23:34                                                                                                    Page 31
+  Thu Nov 19 2015 21:53                                                                                                    Page 31
 
 
   1534 00:0B9B: 4C F0 0C     REFILL:         jmp     DO_COLON
@@ -1889,7 +1889,7 @@
   1576 00:0C28: 42 0A                        dw      EXIT
   1577                        
   1578                        ; SOURCE-ID ( -- 0 | -1 )
-  Mon Aug 24 2015 23:34                                                                                                    Page 32
+  Thu Nov 19 2015 21:53                                                                                                    Page 32
 
 
   1579                        ;
@@ -1950,7 +1950,7 @@
        00:0C7C: 4E 47 
   1625 00:0C7E: 4C F0 0C     DASH_TRAILING:  jmp     DO_COLON
   1626                        
-  Mon Aug 24 2015 23:34                                                                                                    Page 33
+  Thu Nov 19 2015 21:53                                                                                                    Page 33
 
 
   1627                        ; /STRING ( c-addr1 u1 n -- c-addr2 u2 )
@@ -2011,7 +2011,7 @@
   1677                        ; SEARCH
   1678                        
   1679                        
-  Mon Aug 24 2015 23:34                                                                                                    Page 34
+  Thu Nov 19 2015 21:53                                                                                                    Page 34
 
 
   1680                        ;==============================================================================
@@ -2072,7 +2072,7 @@
   1733 00:0D12: 4C F0 0C     BEGIN:          jmp     DO_COLON
   1734                        
   1735 00:0D15: 42 0A                        dw      EXIT
-  Mon Aug 24 2015 23:34                                                                                                    Page 35
+  Thu Nov 19 2015 21:53                                                                                                    Page 35
 
 
   1736                        
@@ -2133,7 +2133,7 @@
   1785                        
   1786                        ; ELSE
   1787                        
-  Mon Aug 24 2015 23:34                                                                                                    Page 36
+  Thu Nov 19 2015 21:53                                                                                                    Page 36
 
 
   1788 00:0D6D: 58 0D 80                     HEADER  IMMEDIATE
@@ -2194,7 +2194,7 @@
   1840                        ;
   1841                        ; Place x on the stack.
   1842                        
-  Mon Aug 24 2015 23:34                                                                                                    Page 37
+  Thu Nov 19 2015 21:53                                                                                                    Page 37
 
 
   1843 00:0DB1: 99 0D 00                     HEADER  NORMAL
@@ -2255,7 +2255,7 @@
   1892 00:0E0F: B9 03 00                     lda     3,y
   1893 00:0E12: 18                           clc                             ; Work out address in user area
   1894 00:0E13: 69 10 02                     adc     #USER_AREA
-  Mon Aug 24 2015 23:34                                                                                                    Page 38
+  Thu Nov 19 2015 21:53                                                                                                    Page 38
 
 
   1895 00:0E16: CA                           dex                             ; Push on data stack
@@ -2316,7 +2316,7 @@
   1946                        ;==============================================================================
   1947                        ; I/O Operations
   1948                        ;------------------------------------------------------------------------------
-  Mon Aug 24 2015 23:34                                                                                                    Page 39
+  Thu Nov 19 2015 21:53                                                                                                    Page 39
 
 
   1949                        
@@ -2377,7 +2377,7 @@
   2001                        
   2002                        ; SPACE ( -- )
   2003                        ;
-  Mon Aug 24 2015 23:34                                                                                                    Page 40
+  Thu Nov 19 2015 21:53                                                                                                    Page 40
 
 
   2004                        ; Display one space.
@@ -2438,7 +2438,7 @@
   2050 00:0EFF: 17 07        TYPE_2          dw      DROP
   2051 00:0F01: 42 0A        TYPE_3          dw      EXIT
   2052                        
-  Mon Aug 24 2015 23:34                                                                                                    Page 41
+  Thu Nov 19 2015 21:53                                                                                                    Page 41
 
 
   2053                        ;================================================================================

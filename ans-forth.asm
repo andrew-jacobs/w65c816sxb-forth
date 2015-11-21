@@ -124,7 +124,7 @@ COLD:
                 dw      ZERO,BLK,STORE
                 dw      FALSE,STATE,STORE
                 dw      CR,CR,DO_S_QUOTE
-                db      35,"HandCoded W65C816 ANS-Forth [15.08]"
+                db      35,"HandCoded W65C816 ANS-Forth [15.11]"
                 dw      TYPE
                 dw      ABORT
 
