@@ -1,4 +1,4 @@
-  Thu Nov 19 2015 21:53                                                                                                    Page 1
+  Sun Nov 22 2015 10:18                                                                                                    Page 1
 
 
                                                ***************************************
@@ -59,7 +59,7 @@
      7                        ;
      8                        ; Western Design Center W65C816 device definitions                                          
      9                        ;------------------------------------------------------------------------------
-  Thu Nov 19 2015 21:53                                                                                                    Page 2
+  Sun Nov 22 2015 10:18                                                                                                    Page 2
 
 
     10                        ; Copyright (C)2015 HandCoded Software Ltd.
@@ -120,7 +120,7 @@
     65                                        endm
     66                        
     67                        ; Resets the X bit making the index registers 16-bits wide
-  Thu Nov 19 2015 21:53                                                                                                    Page 3
+  Sun Nov 22 2015 10:18                                                                                                    Page 3
 
 
     68                        
@@ -181,7 +181,7 @@
     18                        ;
     19                        ;==============================================================================
     20                        ; Notes:
-  Thu Nov 19 2015 21:53                                                                                                    Page 4
+  Sun Nov 22 2015 10:18                                                                                                    Page 4
 
 
     21                        ;
@@ -242,7 +242,7 @@
     76                        ;------------------------------------------------------------------------------
     77                        
     78             00007FE0   VIA2_ORB        equ     $7fe0
-  Thu Nov 19 2015 21:53                                                                                                    Page 5
+  Sun Nov 22 2015 10:18                                                                                                    Page 5
 
 
     79             00007FE0   VIA2_IRB        equ     $7fe0
@@ -303,7 +303,7 @@
     82                                        code
     83                                        extern  Start
     84                        RESET:
-  Thu Nov 19 2015 21:53                                                                                                    Page 6
+  Sun Nov 22 2015 10:18                                                                                                    Page 6
 
 
     85 00:0000: AD CE 7F                     lda     VIA1_IER                ; Disable VIA interrupts
@@ -364,7 +364,7 @@
    140                        
    141                        ; Handle IRQ interrupts in native mode.
    142                        
-  Thu Nov 19 2015 21:53                                                                                                    Page 7
+  Sun Nov 22 2015 10:18                                                                                                    Page 7
 
 
    143                        IRQ:
@@ -425,7 +425,7 @@
    195                        
    196 00:0076: EE 00 02                     inc     JIFFY                   ; Bump jiffy counter
    197 00:0079: AD 00 02                     lda     JIFFY
-  Thu Nov 19 2015 21:53                                                                                                    Page 8
+  Sun Nov 22 2015 10:18                                                                                                    Page 8
 
 
    198 00:007C: C9 C8                        cmp     #TIMER_HZ               ; Reached a second?
@@ -486,7 +486,7 @@
    251 00:00B8: 8D E9 7F                     sta     VIA2_T2CH
    252 00:00BB: 60                           rts
    253                        
-  Thu Nov 19 2015 21:53                                                                                                    Page 9
+  Sun Nov 22 2015 10:18                                                                                                    Page 9
 
 
    254                        ; Fetch the next character from the RX buffer waiting for some to arrive if the
@@ -547,7 +547,7 @@
    307 00:FFF6:                              ds      2               ; $Reserved
    308 00:FFF8: xx xx                        dw      ABORT           ; $FFF8 - ABORT(C02)
    309 00:FFFA: xx xx                        dw      NMIRQ           ; $FFFA - NMI(C02)
-  Thu Nov 19 2015 21:53                                                                                                    Page 10
+  Sun Nov 22 2015 10:18                                                                                                    Page 10
 
 
    310 00:FFFC: xx xx                        dw      RESET           ; $FFFC - RESET(C02)

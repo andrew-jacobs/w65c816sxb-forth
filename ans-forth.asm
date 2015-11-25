@@ -125,7 +125,7 @@ COLD:
                 dw      FALSE,STATE,STORE
                 dw      CR,CR,DO_S_QUOTE
                 db      35,"HandCoded W65C816 ANS-Forth [15.11]"
-                dw      TYPE
+                dw      TYPE,CR,CR
                 dw      ABORT
 
 ;==============================================================================
@@ -1004,9 +1004,9 @@ NEGATE:
 UMAX:
                 lda     DSTACK+1,x              ; Compare the top values
                 cmp     DSTACK+3,x
-                bcs     $+5                     ; Is x2 biggest?
+                bcs     UMAX_EXIT               ; Is x2 biggest?
                 jmp     DROP                    ; No, x1 is
-                jmp     NIP
+UMAX_EXIT:      jmp     NIP
 
 ; UMIN
 
@@ -1015,9 +1015,9 @@ UMAX:
 UMIN:
                 lda     DSTACK+1,x              ; Compare the top values
                 cmp     DSTACK+3,x
-                bcc     $+5                     ; Is x2 smallest?
+                bcc     UMIN_EXIT               ; Is x2 smallest?
                 jmp     DROP                    ; No, x1 is
-                jmp     NIP
+UMIN_EXIT:      jmp     NIP
 
 ;==============================================================================
 ; Double Precision Arithmetic
@@ -1073,9 +1073,9 @@ S_TO_D_1        jmp     NEXT                    ; Done
 ZERO_LESS:
                 lda     DSTACK+1,x              ; Test top of stack
                 stz     DSTACK+1,x              ; Assume false result
-                bpl     $+5                     ; Was the value negative?
+                bpl     ZERO_LT_1               ; Was the value negative?
                 dec     DSTACK+1,x              ; Yes, make true result
-                jmp     NEXT                    ; Done
+ZERO_LT_1:      jmp     NEXT                    ; Done
 
 ; 0<> ( x -- flag )
 ;
@@ -1086,9 +1086,9 @@ ZERO_LESS:
 ZERO_NOT_EQUAL:
                 lda     DSTACK+1,x              ; Test top of stack
                 stz     DSTACK+1,x              ; Assume false result
-                beq     $+5                     ; Was the value non-zero?
+                beq     ZERO_NE_1               ; Was the value non-zero?
                 dec     DSTACK+1,x              ; Yes, make true result
-                jmp     NEXT                    ; Done
+ZERO_NE_1:      jmp     NEXT                    ; Done
 
 ; 0= ( x -- flag )
 ;
@@ -1099,9 +1099,9 @@ ZERO_NOT_EQUAL:
 ZERO_EQUAL:
                 lda     DSTACK+1,x              ; Test top of stack
                 stz     DSTACK+1,x              ; Assume false result
-                bne     $+5                     ; Was the value zero?
+                bne     ZERO_EQ_1               ; Was the value zero?
                 dec     DSTACK+1,x              ; Yes, make true result
-                jmp     NEXT                    ; Done
+ZERO_EQ_1:      jmp     NEXT                    ; Done
 
 ; 0> ( n -- flag )
 ;
@@ -1112,10 +1112,10 @@ ZERO_EQUAL:
 ZERO_GREATER:
                 lda     DSTACK+1,x              ; Test top of stack
                 stz     DSTACK+1,x              ; Assume false result
-                bmi     $+7                     ; Was the value positive?
-                beq     $+5                     ; .. but not zero
+                bmi     ZERO_GT_EXIT            ; Was the value positive?
+                beq     ZERO_GT_EXIT            ; .. but not zero
                 dec     DSTACK+1,x              ; Yes, make true result
-                jmp     NEXT                    ; Done
+ZERO_GT_EXIT:   jmp     NEXT                    ; Done
 
 ; <
 
@@ -1129,9 +1129,9 @@ NOT_EQUAL:
                 inx
                 cmp     DSTACK+1,x              ; Compare with x1
                 stz     DSTACK+1,x              ; Assume equal
-                beq     $+5                     ; Test flags
+                beq     NE_EXIT                 ; Test flags
                 dec     DSTACK+1,x              ; Make result true
-                jmp     NEXT                    ; Done
+NE_EXIT:        jmp     NEXT                    ; Done
 
 ; = ( x1 x2 -- flag )
 ;
@@ -1145,9 +1145,9 @@ EQUAL:
                 inx
                 cmp     DSTACK+1,x              ; Compare with x1
                 stz     DSTACK+1,x              ; Assume not equal
-                bne     $+5                     ; Test the flags
+                bne     EQ_EXIT                 ; Test the flags
                 inc     DSTACK+1,x              ; Make result true
-                jmp     NEXT                    ; Done
+EQ_EXIT:        jmp     NEXT                    ; Done
 
 ; >
 
@@ -1357,7 +1357,8 @@ QUIT_1:         dw      REFILL,QUERY_BRANCH,QUIT_2
 QUIT_2:         dw      STATE,FETCH,ZERO_EQUAL
                 dw      QUERY_BRANCH,QUIT_3
                 dw      DO_S_QUOTE
-                db      2,"Ok",TYPE
+                db      2,"Ok"
+		dw	TYPE
 QUIT_3:         dw      BRANCH,QUIT_1
 
 DO_QUIT:
@@ -1532,7 +1533,7 @@ FIND:           jmp     DO_COLON
                 HEADER  NORMAL
                 db      6,"REFILL"
 REFILL:         jmp     DO_COLON
-                dw      SOURCEID,ZERO_EQUAL,QUERY_BRANCH,REFILL_1
+                dw      SOURCE_ID,ZERO_EQUAL,QUERY_BRANCH,REFILL_1
                 dw      TIB,DUP,HASH_TIB,FETCH,ACCEPT,SPACE
                 dw      LENGTH,STORE,BUFFER,STORE
                 dw      ZERO,TO_IN,STORE,TRUE,EXIT
@@ -1874,6 +1875,8 @@ DO_LOOP
                 jmp     NEXT                    ; Done
 DO_LOOP_END:    iny                             ; Skip over address
                 iny
+		pla				; Drop loop variables
+		pla
                 jmp     NEXT                    ; Done
 
 ; USER
