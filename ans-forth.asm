@@ -7,7 +7,7 @@
 ;
 ; A Direct Threaded ANS Forth for the WDC 65C816
 ;------------------------------------------------------------------------------
-; Copyright (C)2015 HandCoded Software Ltd.
+; Copyright (C)2015-2016 HandCoded Software Ltd.
 ; All rights reserved.
 ;
 ; This work is made available under the terms of the Creative Commons
@@ -23,9 +23,10 @@
 ; the accumulator and index registers in 16-bit mode except when the word needs
 ; 8-bit memory access.
 ;
-; The Forth data stack is indexed using the X register witch values held at
-; the same index offsets as they would be on the return stack. The Y register
-; holds the forth instruction pointer.
+; The Forth data stack is DP
+;
+; The Y register holds the forth instruction pointer and the direct page
+; register is used to access the word address pointer and user variables.
 ;
 ;==============================================================================
 ;------------------------------------------------------------------------------
@@ -65,11 +66,9 @@ LAST_WORD       equ     WORD@<COUNT>
 ; Definitions
 ;------------------------------------------------------------------------------
 
-DSTACK_SIZE     equ     128
-DSTACK_INIT     equ     DSTACK+DSTACK_SIZE-1
-RSTACK_INIT     equ     $01ff
-
 USER_SIZE       equ     20
+DSTACK_SIZE     equ     128
+RSTACK_SIZE     equ     128
 
 TO_IN_OFFSET    equ     0
 BASE_OFFSET     equ     2
@@ -91,14 +90,18 @@ TIB_SIZE        equ     128
                 page0
                 org     $00
 
-WA              ds      2                       ; Word address
+USER_AREA       ds      USER_SIZE               ; User Variables
 
-DSTACK          ds      DSTACK_SIZE             ; The data stack (indexed by X)
+
+DSTACK_START	equ	$0100
+DSTACK_END	equ	DSTACK_START+DSTACK_SIZE
+
+RSTACK_START	equ	$0180
+RSTACK_END	equ	RSTACK_START+RSTACK_SIZE
+
 
                 data
-                org     $210
-
-USER_AREA       ds      USER_SIZE               ; User Variables
+                org     $0200
 
 TIB_AREA        ds      TIB_SIZE                ; Terminal Input Buffer
 
@@ -112,9 +115,10 @@ FORTH           section OFFSET $0400
 Start:
                 native                          ; Go to native mode
                 long_ai                         ; And all 16-bit registers
-                lda     #RSTACK_INIT            ; Initialise return stack
+                lda     #RSTACK_END-1           ; Initialise return stack
                 tcs
-                ldx     #DSTACK_INIT            ; .. and data stack
+                lda     #DSTACK_END-1           ; .. and data stack
+                tcd
 
                 ldy     #COLD                   ; Then perform COLD start
                 jmp     NEXT
@@ -124,7 +128,7 @@ COLD:
                 dw      ZERO,BLK,STORE
                 dw      FALSE,STATE,STORE
                 dw      CR,CR,DO_S_QUOTE
-                db      35,"HandCoded W65C816 ANS-Forth [15.11]"
+                db      35,"HandCoded W65C816 ANS-Forth [16.02]"
                 dw      TYPE,CR,CR
                 dw      ABORT
 
@@ -139,7 +143,7 @@ COLD:
 
                 HEADER  NORMAL
                 db      4,"#TIB"
-HASH_TIB:       jmp     DO_CONSTANT
+HASH_TIB:       jsr     DO_CONSTANT
                 dw      $+2
                 dw      TIB_SIZE-2
 
@@ -150,7 +154,7 @@ HASH_TIB:       jmp     DO_CONSTANT
 
                 HEADER  NORMAL
                 db      3,">IN"
-TO_IN:          jmp     DO_USER
+TO_IN:          jsr     DO_USER
                 dw      TO_IN_OFFSET
 
 ; BASE ( -- a-addr )
@@ -160,7 +164,7 @@ TO_IN:          jmp     DO_USER
 
                 HEADER  NORMAL
                 db      4,"BASE"
-BASE:           jmp     DO_USER
+BASE:           jsr     DO_USER
                 dw      BASE_OFFSET
 
 ; BLK ( -- a-addr )
@@ -172,35 +176,35 @@ BASE:           jmp     DO_USER
 
                 HEADER  NORMAL
                 db      3,"BLK"
-BLK:            jmp     DO_USER
+BLK:            jsr     DO_USER
                 dw      BLK_OFFSET
 
 ; (BUFFER)
 
                 HEADER  NORMAL
                 db      8,"(BUFFER)"
-BUFFER:         jmp     DO_USER
+BUFFER:         jsr     DO_USER
                 dw      BUFFER_OFFSET
 
 ; DP ( -- a-addr )
 
                 HEADER  NORMAL
                 db      2,"DP"
-DP:             jmp     DO_USER
+DP:             jsr     DO_USER
                 dw      DP_OFFSET
 
 ; LATEST ( -- a-addr )
 
                 HEADER  NORMAL
                 db      6,"LATEST"
-LATEST:         jmp     DO_USER
+LATEST:         jsr     DO_USER
                 dw      LATEST_OFFSET
 
 ; (LENGTH)
 
                 HEADER  NORMAL
                 db      8,"(LENGTH)"
-LENGTH:         jmp     DO_USER
+LENGTH:         jsr     DO_USER
                 dw      LENGTH_OFFSET
 
 ; SCR ( -- a-addr )
@@ -210,14 +214,14 @@ LENGTH:         jmp     DO_USER
 
                 HEADER  NORMAL
                 db      3,"SCR"
-SCR:            jmp     DO_USER
+SCR:            jsr     DO_USER
                 dw      SCR_OFFSET
 
 ; (SOURCE-ID)
 
                 HEADER  NORMAL
                 db      11,"(SOURCE-ID)"
-SOURCEID:       jmp     DO_USER
+SOURCEID:       jsr     DO_USER
                 dw      SOURCEID_OFFSET
 
 ; STATE ( -- a-addr )
@@ -228,7 +232,7 @@ SOURCEID:       jmp     DO_USER
 
                 HEADER  NORMAL
                 db      5,"STATE"
-STATE:          jmp     DO_USER
+STATE:          jsr     DO_USER
                 dw      STATE_OFFSET
 
 ; TIB ( -- c-addr )
@@ -237,7 +241,7 @@ STATE:          jmp     DO_USER
 
                 HEADER  NORMAL
                 db      3,"TIB"
-TIB:            jmp     DO_CONSTANT
+TIB:            jsr     DO_CONSTANT
                 dw      TIB_AREA
 
 ;==============================================================================
@@ -251,9 +255,11 @@ TIB:            jmp     DO_CONSTANT
                 HEADER  NORMAL
                 db      1,"0"
 ZERO:
-                dex                             ; Make space on the stack
-                dex
-                stz     DSTACK+1,X              ; And create a zero value
+                tdc
+                dec     a                       ; Make space on the stack
+                dec     a
+                tcd
+                stz     <1                      ; And create a zero value
                 jmp     NEXT                    ; Done
 
 ; BL ( -- char )
@@ -263,10 +269,12 @@ ZERO:
                 HEADER  NORMAL
                 db      2,"BL"
 BL:
-                dex                             ; Make space on the stack
-                dex
+                tdc
+                dec     a                       ; Make space on the stack
+                dec     a
+                tcd
                 lda     #' '                    ; And save a space value
-                sta     DSTACK+1,x
+                sta     <1
                 jmp     NEXT                    ; Done
 
 ; FALSE ( -- false )
@@ -276,9 +284,11 @@ BL:
                 HEADER  NORMAL
                 db      5,"FALSE"
 FALSE:
-                dex                             ; Make space on the stack
-                dex
-                stz     DSTACK+1,X              ; And create a false value
+                tdc
+                dec     a                       ; Make space on the stack
+                dec     a
+                tcd
+                stz     <1                      ; And create a false value
                 jmp     NEXT                    ; Done
 
 ; TRUE ( -- true )
@@ -288,10 +298,12 @@ FALSE:
                 HEADER  NORMAL
                 db      4,"TRUE"
 TRUE:
-                dex                             ; Make space on the stack
-                dex
-                lda     #$ffff                  ; And create a true value
-                sta     DSTACK+1,x
+                tdc
+                dec     a                       ; Make space on the stack
+                dec     a
+                tcd
+                stz     <1                      ; And create a true value
+                dec     <1
                 jmp     NEXT                    ; Done
 
 ;==============================================================================
@@ -304,7 +316,7 @@ TRUE:
 
                 HEADER  NORMAL
                 db      7,"DECIMAL"
-DECIMAL:        jmp     DO_COLON
+DECIMAL:        jsr     DO_COLON
                 dw      DO_LITERAL,10,BASE,STORE
                 dw      EXIT
 
@@ -314,7 +326,7 @@ DECIMAL:        jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      3,"HEX"
-HEX:            jmp     DO_COLON
+HEX:            jsr     DO_COLON
                 dw      DO_LITERAL,16,BASE,STORE
                 dw      EXIT
 
@@ -329,15 +341,14 @@ HEX:            jmp     DO_COLON
                 HEADER  NORMAL
                 db      1,"!"
 STORE:
-                phy
-                ldy     DSTACK+1,x              ; Fetch the memory address
-                lda     DSTACK+3,x              ; Fetch the data value
-                sta     0,y                     ; Save it
-                inx                             ; Clean up data stack
-                inx
-                inx
-                inx
-                ply
+                lda     <3                      ; Fetch data value
+                sta     (1)                     ; .. and store
+                tdc                             ; Clean up data stack
+                inc     a
+                inc     a
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT                    ; Done
 
 ; +! ( n|u a-addr -- )
@@ -347,17 +358,16 @@ STORE:
                 HEADER  NORMAL
                 db      2,"+!"
 PLUS_STORE:
-                phy
-                ldy     DSTACK+1,x              ; Fetch the memory address
-                lda     DSTACK+3,x              ; Fetch the data value
-                clc                             ; Add data to memory
-                adc     0,y
-                sta     0,y                     ; And save result
-                inx                             ; Clean up data stacl
-                inx
-                inx
-                inx
-                ply
+                clc
+                lda     <3                      ; Fetch data value
+                adc     (1)
+                sta     (1)
+                tdc                             ; Clean up data stack
+                inc     a
+                inc     a
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT                    ; Done
 
 ; , ( x -- )
@@ -371,7 +381,7 @@ PLUS_STORE:
 
                 HEADER  NORMAL
                 db      1,","
-COMMA:          jmp     DO_COLON
+COMMA:          jsr     DO_COLON
                 dw      HERE,STORE
                 dw      DO_LITERAL,1,CELLS,ALLOT
                 dw      EXIT
@@ -383,8 +393,7 @@ COMMA:          jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      2,"2!"
-TWO_STORE:
-                jmp     DO_COLON
+TWO_STORE:      jsr     DO_COLON
                 dw      SWAP
                 dw      OVER
                 dw      STORE
@@ -400,8 +409,7 @@ TWO_STORE:
 
                 HEADER  NORMAL
                 db      2,"2@"
-TWO_FETCH:
-                jmp     DO_COLON
+TWO_FETCH:      jsr     DO_COLON
                 dw      DUP
                 dw      CELL_PLUS
                 dw      FETCH
@@ -416,11 +424,8 @@ TWO_FETCH:
                 HEADER  NORMAL
                 db      1,"@"
 FETCH:
-                phy
-                ldy     DSTACK+1,x              ; Fetch the memory address
-                lda     0,y                     ; Load the actual data
-                sta     DSTACK+1,x              ; And replace the top value
-                ply
+                lda     (1)                     ; Fetch from memory
+                sta     <1                      ; .. and replace top value
                 jmp     NEXT                    ; Done
 
 ; ALLOT ( n -- )
@@ -435,7 +440,7 @@ FETCH:
 
                 HEADER  NORMAL
                 db      5,"ALLOT"
-ALLOT:          jmp     DO_COLON
+ALLOT:          jsr     DO_COLON
                 dw      DP,PLUS_STORE
                 dw      EXIT
 
@@ -447,17 +452,16 @@ ALLOT:          jmp     DO_COLON
                 HEADER  NORMAL
                 db      2,"C!"
 C_STORE:
-                phy
-                ldy     DSTACK+1,x              ; Fetch the memory address
-                lda     DSTACK+3,x              ; Fetch the data value
+                lda     <3                      ; Fetch the data value
                 short_a
-                sta     0,y                     ; Save it
+                sta     (1)                     ; And store it
                 long_a
-                inx
-                inx
-                inx
-                inx
-                ply
+                tdc                             ; Clean up the stack
+                inc     a
+                inc     a
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT                    ; Done
 
 ; C, ( char -- )
@@ -472,7 +476,7 @@ C_STORE:
 
                 HEADER  NORMAL
                 db      2,"C,"
-C_COMMA:        jmp     DO_COLON
+C_COMMA:        jsr     DO_COLON
                 dw      HERE,C_STORE
                 dw      DO_LITERAL,1,CHARS,ALLOT
                 dw      EXIT
@@ -485,21 +489,18 @@ C_COMMA:        jmp     DO_COLON
                 HEADER  NORMAL
                 db      2,"C@"
 C_FETCH:
-                phy
-                ldy     DSTACK+1,x              ; Fetch the memory address
                 short_a
-                lda     0,y                     ; Load the actual data
+                lda     (1)                     ; Fetch the data byte
+                sta     <1                      ; .. and replace stack value
+                stz     <2
                 long_a
-                and     #$00ff
-                sta     DSTACK+1,x              ; And replace the top value
-                ply
                 jmp     NEXT                    ; Done
 
 ; HERE
 
                 HEADER  NORMAL
                 db      4,"HERE"
-HERE:           jmp     DO_COLON
+HERE:           jsr     DO_COLON
                 dw      DP,FETCH
                 dw      EXIT
 
@@ -532,8 +533,8 @@ ALIGNED:
                 HEADER  NORMAL
                 db      5,"CELL+"
 CELL_PLUS:
-                inc     DSTACK+1,x              ; Bump the address by two
-                inc     DSTACK+1,X
+                inc     <1                      ; Bump the address by two
+                inc     <1
                 jmp     NEXT
 
 ; CELLS ( n1 -- n2 )
@@ -543,7 +544,7 @@ CELL_PLUS:
                 HEADER  NORMAL
                 db      5,"CELLS"
 CELLS:
-                asl     DSTACK+1,x              ; Two bytes per cell
+                asl     <1                      ; Two bytes per cell
                 jmp     NEXT
 
 ; CHAR+ ( c-addr1 -- c-addr2 )
@@ -553,7 +554,7 @@ CELLS:
                 HEADER  NORMAL
                 db      5,"CHAR+"
 CHAR_PLUS:
-                inc     DSTACK+1,x              ; Bump the address by one
+                inc     <1                      ; Bump the address by one
                 jmp     NEXT
 
 ; CHARS ( n1 -- n2 )
@@ -576,11 +577,13 @@ CHARS:
                 HEADER  NORMAL
                 db      5,"2DROP"
 TWO_DROP:
-                inx
-                inx
-                inx
-                inx
-                jmp     NEXT
+                tdc                             ; Removed two words from stack
+                inc     a
+                inc     a
+                inc     a
+                inc     a
+                tcd
+                jmp     NEXT                    ; Done
 
 ; 2DUP ( x1 x2 -- x1 x2 x1 x2 )
 ;
@@ -589,14 +592,17 @@ TWO_DROP:
                 HEADER  NORMAL
                 db      4,"2DUP"
 TWO_DUP:
-                lda     DSTACK+1,x              ; Fetch the top value
-                dex                             ; Make space for new values
-                dex
-                dex
-                dex
-                sta     DSTACK+1,x              ; Make two copies
-                sta     DSTACK+3,x
-                jmp     NEXT
+                tdc                             ; Make space for new value
+                dec     a
+                dec     a
+                dec     a
+                dec     a
+                tcd
+                lda     <5                      ; Copy top two values
+                sta     <1
+                lda     <7
+                sta     <3
+                jmp     NEXT                    ; Done
 
 ; 2OVER ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
 ;
@@ -605,17 +611,21 @@ TWO_DUP:
                 HEADER  NORMAL
                 db      5,"2OVER"
 TWO_OVER:
-                lda     DSTACK+7,x              ; Copy over x1
-                dex
-                dex
-                sta     DSTACK+1,x
-                lda     DSTACK+7,x              ; Copy over x2
-                dex
-                dex
-                sta     DSTACK+1,x
+                tdc                             ; Make space for new value
+                dec     a
+                dec     a
+                dec     a
+                dec     a
+                tcd
+                lda     <9                      ; Ciopy top two values
+                sta     <1
+                lda     <11
+                sta     <3
                 jmp     NEXT                    ; Done
 
 ; 2ROT
+
+; TODO
 
 ; 2SWAP ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
 ;
@@ -624,17 +634,18 @@ TWO_OVER:
                 HEADER  NORMAL
                 db      5,"2SWAP"
 TWO_SWAP:
-                lda     DSTACK+3,x              ; Save x3
+                lda     <3                      ; Save x3
                 pha
-                lda     DSTACK+1,x              ; Save x4
-                lda     DSTACK+7,x              ; Move x1
-                sta     DSTACK+3,x
-                lda     DSTACK+5,x              ; Move x2
-                sta     DSTACK+1,x
+                lda     <1                      ; Save x4
+                pha
+                lda     <7                      ; Move x1
+                sta     <3
+                lda     <5                      ; Move x2
+                sta     <1
                 pla                             ; Move x4
-                sta     DSTACK+5,x
+                sta     <5
                 pla                             ; Move x3
-                sta     DSTACK+7,x
+                sta     <7
                 jmp     NEXT                    ; Done
 
 ; ?DUP ( x -- 0 | x x )
@@ -644,12 +655,9 @@ TWO_SWAP:
                 HEADER  NORMAL
                 db      4,"?DUP"
 QUERY_DUP:
-                lda     DSTACK+1,x              ; Fetch top value
-                beq     QUERY_DUP_1             ; Non-zero value?
-                dex
-                dex
-                sta     DSTACK+1,x              ; Push a copy
-QUERY_DUP_1:    jmp     NEXT                    ; Done
+                lda     <1                      ; Fetch top value
+                bne     DUP                     ; Non-zero value?
+                jmp     NEXT                    ; Done
 
 ; DROP ( x -- )
 ;
@@ -658,8 +666,10 @@ QUERY_DUP_1:    jmp     NEXT                    ; Done
                 HEADER  NORMAL
                 db      4,"DROP"
 DROP:
-                inx                             ; Drop the top value
-                inx
+                tdc                             ; Drop the top value
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT                    ; Done
 
 ; DUP ( x -- x x )
@@ -669,10 +679,12 @@ DROP:
                 HEADER  NORMAL
                 db      3,"DUP"
 DUP:
-                lda     DSTACK+1,x              ; Fetch top value
-                dex                             ; And make a copy
-                dex
-                sta     DSTACK+1,x
+                tdc
+                dec     a
+                dec     a
+                tcd
+                lda     <3                      ; Fetch top value
+                sta     <1                      ; And make a copy
                 jmp     NEXT                    ; Done
 
 ; NIP ( x1 x2 -- x2 )
@@ -682,11 +694,9 @@ DUP:
                 HEADER  NORMAL
                 db      3,"NIP"
 NIP:
-                lda     DSTACK+1,x              ; Copy x2 over x1
-                sta     DSTACK+3,x
-                inx                             ; Clean up the stack
-                inx
-                jmp     NEXT
+                lda     <1                      ; Copy x2 over x1
+                sta     <3
+                bra     DROP
 
 ; OVER ( x1 x2 -- x1 x2 x1 )
 ;
@@ -695,10 +705,12 @@ NIP:
                 HEADER  NORMAL
                 db      4,"OVER"
 OVER:
-                lda     DSTACK+3,x              ; Fetch second value
-                dex                             ; And make a copy
-                dex
-                sta     DSTACK+1,x
+                tdc
+                dec     a
+                dec     a
+                tcd
+                lda     <5                      ; Fetch second value
+                sta     <1                      ; And make a copy
                 jmp     NEXT                    ; Done
 
 ; SWAP ( x1 x2 -- x2 x1 )
@@ -708,16 +720,28 @@ OVER:
                 HEADER  NORMAL
                 db      4,"SWAP"
 SWAP:
-                lda     DSTACK+1,x              ; Fetch top of stack
-                pha                             ; .. and save
-                lda     DSTACK+3,x              ; Exchange second
-                sta     DSTACK+1,x              ; .. and top
-                pla                             ; Recover top
-                sta     DSTACK+3,x              ; .. and save as second
+                lda     <1                      ; Switch top two words
+                ldx     <3
+                sta     <3
+                stx     <1
                 jmp     NEXT                    ; Done
 
-; ROT
-; ROLL
+; ROT ( x1 x2 x3 -- x2 x3 x1 )
+;
+; Rotate the top three stack entries.
+
+                HEADER  NORMAL
+                db      3,"ROT"
+ROT:
+                ldx     <5                      ; Save x1
+                lda     <3                      ; Move x2
+                sta     <5
+                lda     <1                      ; Move x3
+                sta     <3
+                stx     <1                      ; Restore x1
+                jmp     NEXT
+
+; ROLL [TODO]
 
 ; TUCK ( x1 x2 -- x2 x1 x2 )
 ;
@@ -725,7 +749,7 @@ SWAP:
 
                 HEADER  NORMAL
                 db      4,"TUCK"
-TUCK:           jmp     DO_COLON
+TUCK:           jsr     DO_COLON
                 dw      SWAP
                 dw      OVER
                 dw      EXIT
@@ -742,14 +766,16 @@ TUCK:           jmp     DO_COLON
                 HEADER  NORMAL
                 db      3,"2>R"
 TWO_TO_R:
-                lda     DSTACK+3,x              ; Transfer x1
+                lda     <3                      ; Transfer x1
                 pha
-                lda     DSTACK+1,x              ; Transfer x2
+                lda     <1                      ; Transfer x2
                 pha
-                inx                             ; Clean up data stack
-                inx
-                inx
-                inx
+                tdc
+                inc     a                       ; Clean up data stack
+                inc     a
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT                    ; Done
 
 ; 2R> ( -- x1 x2 ) ( R: x1 x2 -- )
@@ -760,14 +786,16 @@ TWO_TO_R:
                 HEADER  NORMAL
                 db      3,"2R>"
 TWO_R_FROM:
-                dex                             ; Make space for values
-                dex
-                dex
-                dex
+                tdc
+                dec     a                       ; Make space for values
+                dec     a
+                dec     a
+                dec     a
+                tcd
                 pla                             ; Transfer x2
-                sta     DSTACK+1,x
+                sta     <1
                 pla                             ; Transfer x1
-                sta     DSTACK+3,x
+                sta     <3
                 jmp     NEXT                    ; Done
 
 ; 2R@ ( -- x1 x2 ) ( R: x1 x2 -- x1 x2 )
@@ -778,14 +806,16 @@ TWO_R_FROM:
                 HEADER  NORMAL
                 db      3,"2R@"
 TWO_R_FETCH:
-                dex                             ; Make space for values
-                dex
-                dex
-                dex
+                tdc
+                dec     a                       ; Make space for values
+                dec     a
+                dec     a
+                dec     a
+                tcd
                 lda     1,s                     ; Transfer x2
-                sta     DSTACK+1,x
+                sta     <1
                 lda     3,s                     ; Transfer x1
-                sta     DSTACK+3,x
+                sta     <3
                 jmp     NEXT                    ; Done
 
 ; >R ( x -- ) ( R: -- x )
@@ -795,10 +825,12 @@ TWO_R_FETCH:
                 HEADER  NORMAL
                 db      2,">R"
 TO_R:
-                lda     DSTACK+1,x              ; Transfer top value
+                lda     <1                      ; Transfer top value
                 pha                             ; .. to return stack
-                inx
-                inx
+                tdc
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT                    ; Done
 
 ; I ( -- n|u ) ( R: loop-sys -- loop-sys )
@@ -809,10 +841,12 @@ TO_R:
                 HEADER  NORMAL
                 db      1,"I"
 I:
+                tdc
+                dec     a
+                dec     a
+                tcd
                 lda     1,s
-                dex
-                dex
-                sta     DSTACK+1,x
+                sta     <1
                 jmp     NEXT
 
 ; J ( -- n|u ) ( R: loop-sys1 loop-sys2 -- loop-sys1 loop-sys2 )
@@ -824,10 +858,12 @@ I:
                 HEADER  NORMAL
                 db      1,"J"
 J:
-                lda     3,s
-                dex
-                dex
-                sta     DSTACK+1,x
+                tdc
+                dec     a
+                dec     a
+                tcd
+                lda     5,s
+                sta     <1
                 jmp     NEXT
 
 ; R> ( -- x ) ( R: x -- )
@@ -837,10 +873,12 @@ J:
                 HEADER  NORMAL
                 db      2,"R>"
 R_FROM:
+                tdc
+                dec     a
+                dec     a
+                tcd
                 pla                             ; Fetch return stack value
-                dex                             ; And push
-                dex
-                sta     DSTACK+1,X
+                sta     <1
                 jmp     NEXT                    ; Done
 
 ; R@ ( -- x ) ( R: x -- x )
@@ -850,27 +888,13 @@ R_FROM:
                 HEADER  NORMAL
                 db      2,"R@"
 R_FETCH:
+                tdc
+                dec     a
+                dec     a
+                tcd
                 lda     1,s
-                dex
-                dex
-                sta     DSTACK+1,x
+                sta     <1
                 jmp     NEXT
-
-; ROT ( x1 x2 x3 -- x2 x3 x1 )
-;
-; Rotate the top three stack entries.
-
-                HEADER  NORMAL
-                db      3,"ROT"
-ROT:            lda     DSTACK+5,x              ; Save x1
-                pha
-                lda     DSTACK+3,x              ; Move x2,x3 up
-                sta     DSTACK+5,x
-                lda     DSTACK+1,x
-                sta     DSTACK+3,x
-                pla                             ; Recover x1
-                sta     DSTACK+1,x
-                jmp     NEXT                    ; Done
 
 ;==============================================================================
 ; Single Precision Arithmetic
@@ -897,12 +921,14 @@ STAR:
                 db      1,"+"
 PLUS:
                 clc                             ; Add top two values
-                lda     DSTACK+1,x
-                adc     DSTACK+3,x
-                sta     DSTACK+3,x              ; Save result
-                inx                             ; Clean up data stack
-                inx
-                JMP     NEXT                    ; Done
+                lda     <3
+                adc     <1
+                sta     <3                      ; Save result
+                tdc
+                inc     a                       ; Clean up data stack
+                inc     a
+                tcd
+                jmp     NEXT                    ; Done
 
 ; - ( n1|u1 n2|u2 -- n3|u3 )
 ;
@@ -912,11 +938,13 @@ PLUS:
                 db      1,"-"
 MINUS:
                 sec                             ; Subtract top two values
-                lda     DSTACK+1,x
-                sbc     DSTACK+3,x
-                sta     DSTACK+3,x              ; Save result
-                inx                             ; Clean up data stack
-                inx
+                lda     <3
+                sbc     <1
+                sta     <3                      ; Save result
+                tdc
+                inc     a                       ; Clean up data stack
+                inc     a
+                tcd
                 jmp     NEXT                    ; Done
 
 ; /
@@ -929,7 +957,7 @@ MINUS:
                 HEADER  NORMAL
                 db      2,"1+"
 ONE_PLUS:
-                inc     DSTACK+1,x              ; Increment top of stack
+                inc     <1                      ; Increment top of stack
                 jmp     NEXT                    ; Done
 
 ; 1- ( n1|u1 -- n2|u2 )
@@ -939,7 +967,7 @@ ONE_PLUS:
                 HEADER  NORMAL
                 db      2,"1-"
 ONE_MINUS:
-                dec     DSTACK+1,x              ; Decrement top of stack
+                dec     <1                      ; Decrement top of stack
                 jmp     NEXT                    ; Done
 
 ; 2* ( x1 -- x2 )
@@ -950,7 +978,7 @@ ONE_MINUS:
                 HEADER  NORMAL
                 db      2,"2*"
 TWO_STAR:
-                asl     DSTACK+1,x              ; Multiply top value by two
+                asl     <1                      ; Multiply top value by two
                 jmp     NEXT                    ; Done
 
 ; 2/ ( x1 -- x2 )
@@ -961,9 +989,9 @@ TWO_STAR:
                 HEADER  NORMAL
                 db      2,"2/"
 TWO_SLASH:
-                lda     DSTACK+1,x              ; Load the top value
+                lda     <1                      ; Load the top value
                 rol     a                       ; Extract the top bit
-                ror     DSTACK+1,x              ; And shift back into value
+                ror     <1                      ; And shift back into value
                 jmp     NEXT
 
 ; ABS ( n -- u )
@@ -973,12 +1001,9 @@ TWO_SLASH:
                 HEADER  NORMAL
                 db      3,"ABS"
 ABS:
-                sec                             ; Assume to is negative
-                lda     #0
-                sbc     DSTACK+1,x              ; Invert it
-                bmi     ABS_1                   ; Correct assumption?
-                sta     DSTACK+1,x              ; Yes, same the result
-ABS_1           jmp     NEXT                    ; Done
+                lda     <1
+                bmi     NEGATE
+                jmp     NEXT                    ; Done
 
 ; MAX
 ; MIN
@@ -993,28 +1018,28 @@ ABS_1           jmp     NEXT                    ; Done
 NEGATE:
                 sec                             ; Negate the top of stack
                 lda     #0
-                sbc     DSTACK+1,x
-                sta     DSTACK+1,x
+                sbc     <1
+                sta     <1
                 jmp     NEXT                    ; Done
 
-; UMAX
+; UMAX ( x1 x2 -- x1|x2 )
 
                 HEADER  NORMAL
                 db      4,"UMAX"
 UMAX:
-                lda     DSTACK+1,x              ; Compare the top values
-                cmp     DSTACK+3,x
+                lda     <1                      ; Compare the top values
+                cmp     <3
                 bcs     UMAX_EXIT               ; Is x2 biggest?
                 jmp     DROP                    ; No, x1 is
 UMAX_EXIT:      jmp     NIP
 
-; UMIN
+; UMIN ( x1 x2 -- x1|x2 )
 
                 HEADER  NORMAL
                 db      4,"UMIN"
 UMIN:
-                lda     DSTACK+1,x              ; Compare the top values
-                cmp     DSTACK+3,x
+                lda     <1                      ; Compare the top values
+                cmp     <3
                 bcc     UMIN_EXIT               ; Is x2 smallest?
                 jmp     DROP                    ; No, x1 is
 UMIN_EXIT:      jmp     NIP
@@ -1040,8 +1065,10 @@ UMIN_EXIT:      jmp     NIP
                 HEADER  NORMAL
                 db      3,"D>S"
 D_TO_S:
-                inx                             ; Drop the high word
-                inx
+                tdc
+                inc     a                       ; Drop the high word
+                inc     a
+                tcd
                 jmp     NEXT
 
 ; S>D ( n -- d )
@@ -1052,12 +1079,14 @@ D_TO_S:
                 HEADER  NORMAL
                 db      3,"S>D"
 S_TO_D:
-                dex                             ; Assume n is positive
-                dex
-                stz     DSTACK+1,x              ; .. push a zero value
-                bit     DSTACK+3,x              ; Test the number
+                tdc
+                dec     a                       ; Assume n is positive
+                dec     a
+                tcd
+                stz     <1                      ; .. push a zero value
+                lda     <3                      ; Test the number
                 bpl     S_TO_D_1
-                dec     DSTACK+1,x              ; Make top -1 if negative
+                dec     <1                      ; Make top -1 if negative
 S_TO_D_1        jmp     NEXT                    ; Done
 
 ;==============================================================================
@@ -1071,10 +1100,10 @@ S_TO_D_1        jmp     NEXT                    ; Done
                 HEADER  NORMAL
                 db      2,"0<"
 ZERO_LESS:
-                lda     DSTACK+1,x              ; Test top of stack
-                stz     DSTACK+1,x              ; Assume false result
+                lda     <1                      ; Test top of stack
+                stz     <1                      ; Assume false result
                 bpl     ZERO_LT_1               ; Was the value negative?
-                dec     DSTACK+1,x              ; Yes, make true result
+                dec     <1                      ; Yes, make true result
 ZERO_LT_1:      jmp     NEXT                    ; Done
 
 ; 0<> ( x -- flag )
@@ -1084,10 +1113,10 @@ ZERO_LT_1:      jmp     NEXT                    ; Done
                 HEADER  NORMAL
                 db      3,"0<>"
 ZERO_NOT_EQUAL:
-                lda     DSTACK+1,x              ; Test top of stack
-                stz     DSTACK+1,x              ; Assume false result
+                lda     <1                      ; Test top of stack
+                stz     <1                      ; Assume false result
                 beq     ZERO_NE_1               ; Was the value non-zero?
-                dec     DSTACK+1,x              ; Yes, make true result
+                dec     <1                      ; Yes, make true result
 ZERO_NE_1:      jmp     NEXT                    ; Done
 
 ; 0= ( x -- flag )
@@ -1097,10 +1126,10 @@ ZERO_NE_1:      jmp     NEXT                    ; Done
                 HEADER  NORMAL
                 db      2,"0="
 ZERO_EQUAL:
-                lda     DSTACK+1,x              ; Test top of stack
-                stz     DSTACK+1,x              ; Assume false result
+                lda     <1                      ; Test top of stack
+                stz     <1                      ; Assume false result
                 bne     ZERO_EQ_1               ; Was the value zero?
-                dec     DSTACK+1,x              ; Yes, make true result
+                dec     <1                      ; Yes, make true result
 ZERO_EQ_1:      jmp     NEXT                    ; Done
 
 ; 0> ( n -- flag )
@@ -1110,11 +1139,11 @@ ZERO_EQ_1:      jmp     NEXT                    ; Done
                 HEADER  NORMAL
                 db      2,"0>"
 ZERO_GREATER:
-                lda     DSTACK+1,x              ; Test top of stack
-                stz     DSTACK+1,x              ; Assume false result
+                lda     <1                      ; Test top of stack
+                stz     <1                      ; Assume false result
                 bmi     ZERO_GT_EXIT            ; Was the value positive?
                 beq     ZERO_GT_EXIT            ; .. but not zero
-                dec     DSTACK+1,x              ; Yes, make true result
+                dec     <1                      ; Yes, make true result
 ZERO_GT_EXIT:   jmp     NEXT                    ; Done
 
 ; <
@@ -1124,13 +1153,15 @@ ZERO_GT_EXIT:   jmp     NEXT                    ; Done
                 HEADER  NORMAL
                 db      2,"<>"
 NOT_EQUAL:
-                lda     DSTACK+1,x              ; Pull x2 from stack
-                inx
-                inx
-                cmp     DSTACK+1,x              ; Compare with x1
-                stz     DSTACK+1,x              ; Assume equal
+                ldx     <1                      ; Pull x2 from stack
+                tdc
+                inc     a
+                inc     a
+                tcd
+                cpx     <1                      ; Compare with x1
+                stz     <1                      ; Assume equal
                 beq     NE_EXIT                 ; Test flags
-                dec     DSTACK+1,x              ; Make result true
+                dec     <1                      ; Make result true
 NE_EXIT:        jmp     NEXT                    ; Done
 
 ; = ( x1 x2 -- flag )
@@ -1140,13 +1171,15 @@ NE_EXIT:        jmp     NEXT                    ; Done
                 HEADER  NORMAL
                 db      1,"="
 EQUAL:
-                lda     DSTACK+1,x              ; Pull x2 from stack
-                inx
-                inx
-                cmp     DSTACK+1,x              ; Compare with x1
-                stz     DSTACK+1,x              ; Assume not equal
+                ldx     <1                      ; Pull x2 from stack
+                tdc
+                inc     a
+                inc     a
+                tcd
+                cpx     <1                      ; Compare with x1
+                stz     <1                      ; Assume not equal
                 bne     EQ_EXIT                 ; Test the flags
-                inc     DSTACK+1,x              ; Make result true
+                inc     <1                      ; Make result true
 EQ_EXIT:        jmp     NEXT                    ; Done
 
 ; >
@@ -1165,11 +1198,13 @@ EQ_EXIT:        jmp     NEXT                    ; Done
                 HEADER  NORMAL
                 db      3,"AND"
 AND:
-                lda     DSTACK+1,x
-                and     DSTACK+3,x
-                sta     DSTACK+3,x
-                inx
-                inx
+                lda     <1
+                and     <3
+                sta     <3
+                tdc
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT
 
 ; INVERT ( x1 -- x2 )
@@ -1179,9 +1214,9 @@ AND:
                 HEADER  NORMAL
                 db      6,"INVERT"
 INVERT:
-                lda     DSTACK+1,x              ; Fetch top value
+                lda     <1                      ; Fetch top value
                 eor     #$ffff                  ; Invert all the bits
-                sta     DSTACK+1,x              ; .. and write back
+                sta     <1                      ; .. and write back
                 jmp     NEXT                    ; Done
 
 ; LSHIFT ( x1 u -- x2 )
@@ -1193,19 +1228,21 @@ INVERT:
                 HEADER  NORMAL
                 db      6,"LSHIFT"
 LSHIFT:
-                lda     DSTACK+1,x              ; Pull bit count
+                ldx     <1                      ; Pull bit count
                 php
-                inx                             ; .. from the stack
-                inx
+                tdc
+                inc     a                       ; .. from the stack
+                inc     a
+                tcd
                 plp
                 beq     LSHIFT_0                ; Zero shift?
-                cmp     #16                     ; Shifting by 16+ bits
+                cpx     #16                     ; Shifting by 16+ bits
                 bcs     LSHIFT_2                ; Yes, result will be zero
-LSHIFT_1        asl     DSTACK+1,x              ; Shift one bit left
-                dec     a                       ; Update count
+LSHIFT_1        asl     <1                      ; Shift one bit left
+                dex                             ; Update count
                 bne     LSHIFT_1                ; .. and repeat as needed
 LSHIFT_0        jmp     NEXT                    ; Done
-LSHIFT_2        stz     DSTACK+1,x              ; Clear top value
+LSHIFT_2        stz     <1                      ; Clear top value
                 jmp     NEXT                    ; Done
 
 ; OR ( x1 x2 -- x3 )
@@ -1215,11 +1252,13 @@ LSHIFT_2        stz     DSTACK+1,x              ; Clear top value
                 HEADER  NORMAL
                 db      2,"OR"
 OR:
-                lda     DSTACK+1,x
-                ora     DSTACK+3,x
-                sta     DSTACK+3,x
-                inx
-                inx
+                lda     <1
+                ora     <3
+                sta     <3
+                tdc
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT
 
 ; RSHIFT ( x1 u -- x2 )
@@ -1231,19 +1270,21 @@ OR:
                 HEADER  NORMAL
                 db      6,"RSHIFT"
 RSHIFT:
-                lda     DSTACK+1,x              ; Pull bit count
+                ldx     <1                      ; Pull bit count
                 php
-                inx                             ; .. from the stack
-                inx
+                tdc
+                inc     a                       ; .. from the stack
+                inc     a
+                tcd
                 plp
                 beq     RSHIFT_0                ; Zero shift?
-                cmp     #16                     ; Shifting by 16+ bits
+                cpx     #16                     ; Shifting by 16+ bits
                 bcs     RSHIFT_2                ; Yes, result will be zero
-RSHIFT_1        lsr     DSTACK+1,x              ; Shift one bit left
-                dec     a                       ; Update count
+RSHIFT_1        lsr     <1                      ; Shift one bit left
+                dex                             ; Update count
                 bne     RSHIFT_1                ; .. and repeat as needed
 RSHIFT_0        jmp     NEXT                    ; Done
-RSHIFT_2        stz     DSTACK+1,x              ; Clear top value
+RSHIFT_2        stz     <1                      ; Clear top value
                 jmp     NEXT                    ; Done
 
 ; XOR ( x1 x2 -- x3 )
@@ -1253,11 +1294,13 @@ RSHIFT_2        stz     DSTACK+1,x              ; Clear top value
                 HEADER  NORMAL
                 db      3,"XOR"
 XOR:
-                lda     DSTACK+1,x
-                eor     DSTACK+3,x
-                sta     DSTACK+3,x
-                inx
-                inx
+                lda     <1
+                eor     <3
+                sta     <3
+                tdc
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT
 
 ;==============================================================================
@@ -1271,12 +1314,13 @@ XOR:
 
                 HEADER  NORMAL
                 db      5,"ABORT"
-ABORT:          jmp     DO_COLON
+ABORT:          jsr     DO_COLON
                 dw      DO_ABORT
                 dw      QUIT
 
 DO_ABORT:
-                ldx     #DSTACK_INIT
+                lda     #DSTACK_END-1
+		tcd
                 jmp     NEXT
 
 ; (BUILD) ( dtc-addr -- )
@@ -1285,11 +1329,11 @@ DO_ABORT:
 
                 HEADER  NORMAL
                 db      7,"(BUILD)"
-BUILD:          jmp     DO_COLON
+BUILD:          jsr     DO_COLON
                 dw      DO_LITERAL,$4c,C_COMMA
                 dw      COMMA,EXIT
 
-; CREATE ( -- )
+; CREATE ( -- ) [TODO]
 ;
 ; Skip leading space delimiters. Parse name delimited by a space. Create a
 ; definition for name with the execution semantics defined below. If the data-
@@ -1299,23 +1343,25 @@ BUILD:          jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      6,"CREATE"
-CREATE:         jmp     DO_COLON
+CREATE:         jsr     DO_COLON
                 ; parse
                 dw      HERE,LATEST,FETCH,COMMA
                 dw      ZERO,C_COMMA,LATEST,STORE
                 ; move name
                 dw      EXIT
-                
+
 ; EXECUTE
 
                 HEADER  NORMAL
                 db      7,"EXECUTE"
 EXECUTE:
-                lda     DSTACK+1,x
-                inx
-                inx
-                dec     a
-                pha
+                ldx     <1
+                tdc
+                inc     a
+                inc     a
+                tcd
+                dex
+                phx
                 rts
 
 ; EXIT ( -- ) ( R: nest-sys -- )
@@ -1348,7 +1394,7 @@ EXIT:
 
                 HEADER  NORMAL
                 db      4,"QUIT"
-QUIT:           jmp     DO_COLON
+QUIT:           jsr     DO_COLON
                 dw      DO_QUIT
                 dw      ZERO,STATE,STORE
                 dw      ZERO,SOURCEID,STORE
@@ -1358,11 +1404,11 @@ QUIT_2:         dw      STATE,FETCH,ZERO_EQUAL
                 dw      QUERY_BRANCH,QUIT_3
                 dw      DO_S_QUOTE
                 db      2,"Ok"
-		dw	TYPE
+                dw      TYPE
 QUIT_3:         dw      BRANCH,QUIT_1
 
 DO_QUIT:
-                lda     #RSTACK_INIT            ; Reset the return stack
+                lda     #RSTACK_END-1           ; Reset the return stack
                 tcs
                 jmp     NEXT                    ; Done
 
@@ -1374,7 +1420,7 @@ DO_QUIT:
 
                 HEADER  NORMAL
                 db      7,"?NUMBER"
-QUERY_NUMBER:   db      DO_COLON
+QUERY_NUMBER:   jsr     DO_COLON
 
                 dw      EXIT
 
@@ -1396,27 +1442,32 @@ QUERY_NUMBER:   db      DO_COLON
 ;   OVER + 1- OVER      -- sa ea a
 ;   BEGIN KEY           -- sa ea a c
 ;   DUP 0D <> WHILE
-;       DUP EMIT        -- sa ea a c
-;       DUP 8 = IF  DROP 1-
+;       DUP 8 = OVER 127 = OR IF
+;             DROP 1-
 ;             >R OVER R> UMAX
-;             ELSE  OVER C! 1+ OVER UMIN
+;             8 EMIT SPACE 8 EMIT
+;       ELSE
+;           DUP EMIT    -- sa ea a c
+;           OVER C! 1+ OVER UMIN
 ;       THEN            -- sa ea a
 ;   REPEAT              -- sa ea a c
 ;   DROP NIP SWAP - ;
 
                 HEADER  NORMAL
                 db      6,"ACCEPT"
-ACCEPT:         jmp     DO_COLON
+ACCEPT:         jsr     DO_COLON
                 dw      OVER,PLUS,ONE_MINUS,OVER
 ACCEPT_1:       dw      KEY,DUP,DO_LITERAL,$0D,NOT_EQUAL
                 dw      QUERY_BRANCH,ACCEPT_4
-                dw      DUP,EMIT
                 dw      DUP,DO_LITERAL,$08,EQUAL
                 dw      OVER,DO_LITERAL,$7f,EQUAL,OR
                 dw      QUERY_BRANCH,ACCEPT_2
                 dw      DROP,ONE_MINUS
-                dw      TO_R,OVER,R_FROM,UMAX,BRANCH,ACCEPT_3
-ACCEPT_2:       dw      OVER,C_STORE,ONE_PLUS,OVER,UMIN
+                dw      TO_R,OVER,R_FROM,UMAX
+                dw      DO_LITERAL,8,EMIT,SPACE
+                dw      DO_LITERAL,8,EMIT,BRANCH,ACCEPT_3
+ACCEPT_2:       dw      DUP,EMIT
+                dw      OVER,C_STORE,ONE_PLUS,OVER,UMIN
 ACCEPT_3:       dw      BRANCH,ACCEPT_1
 ACCEPT_4:       dw      DROP,NIP,SWAP,MINUS,EXIT
 
@@ -1436,7 +1487,7 @@ ACCEPT_4:       dw      DROP,NIP,SWAP,MINUS,EXIT
 
                 HEADER  NORMAL
                 db      8,"EVALUATE"
-EVALUATE:       jmp     DO_COLON
+EVALUATE:       jsr     DO_COLON
                 dw      TO_R,TO_R,SAVE_INPUT
                 dw      R_FROM,R_FROM
                 dw      TRUE,SOURCEID,STORE
@@ -1466,7 +1517,7 @@ EVALUATE:       jmp     DO_COLON
 
                 HEADER  INTERPRET
                 dw      9,"INTERPRET"
-INTERPRET:      jmp     DO_COLON
+INTERPRET:      jsr     DO_COLON
 INTERPRET_1:    dw      BL,WORD,DUP,C_FETCH,QUERY_BRANCH,INTERPRET_7
                 dw      FIND,QUERY_DUP,QUERY_BRANCH,INTERPRET_4
                 dw      ONE_PLUS,STATE,FETCH,ZERO_EQUAL,OR
@@ -1503,7 +1554,7 @@ INTERPRET_7:    dw      DROP,EXIT
 
                 HEADER  NORMAL
                 db      4,"FIND"
-FIND:           jmp     DO_COLON
+FIND:           jsr     DO_COLON
 
 
 
@@ -1532,7 +1583,7 @@ FIND:           jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      6,"REFILL"
-REFILL:         jmp     DO_COLON
+REFILL:         jsr     DO_COLON
                 dw      SOURCE_ID,ZERO_EQUAL,QUERY_BRANCH,REFILL_1
                 dw      TIB,DUP,HASH_TIB,FETCH,ACCEPT,SPACE
                 dw      LENGTH,STORE,BUFFER,STORE
@@ -1543,7 +1594,7 @@ REFILL_1:       dw      FALSE,EXIT
 
                 HEADER  NORMAL
                 db      13,"RESTORE-INPUT"
-RESTORE_INPUT   jmp     DO_COLON
+RESTORE_INPUT   jsr     DO_COLON
                 dw      TO_IN,STORE
                 dw      LENGTH,STORE
                 dw      BUFFER,STORE
@@ -1554,7 +1605,7 @@ RESTORE_INPUT   jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      10,"SAVE-INPUT"
-SAVE_INPUT:     jmp     DO_COLON
+SAVE_INPUT:     jsr     DO_COLON
                 dw      SOURCEID,FETCH
                 dw      BUFFER,FETCH
                 dw      LENGTH,FETCH
@@ -1571,7 +1622,7 @@ SAVE_INPUT:     jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      6,"SOURCE"
-SOURCE:         jmp     DO_COLON
+SOURCE:         jsr     DO_COLON
                 dw      BUFFER,FETCH
                 dw      LENGTH,FETCH
                 dw      EXIT
@@ -1583,8 +1634,9 @@ SOURCE:         jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      9,"SOURCE-ID"
-SOURCE_ID:      jmp     DO_COLON
-                dw      SOURCEID,FETCH,EXIT
+SOURCE_ID:      jsr     DO_COLON
+                dw      SOURCEID,FETCH
+                dw      EXIT
 
 ; WORD
 ;
@@ -1600,18 +1652,35 @@ SOURCE_ID:      jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      4,"WORD"
-WORD:           jmp     DO_COLON
+WORD:           jsr     DO_COLON
                 dw      DUP,SOURCE,TO_IN,FETCH,SLASH_STRING
                 dw      DUP,TO_R,ROT,SKIP
                 dw      OVER,TO_R,ROT,SCAN
 
-                dw      EXIT
-
-SKIP:           jmp     DO_COLON
+                ; TODO
 
                 dw      EXIT
 
-SCAN:           jmp     DO_COLON
+; SKIP ( c-addr n c == c-addr' n' )
+
+SKIP:
+SKIP_1:         lda     <3                      ; Any data left to skip over?
+                beq     SKIP_2                  ; No.
+                lda     <1                      ; Fetch and compare with skip
+                short_a
+                cmp     (5)
+                long_a
+                bne     SKIP_2                  ; Cannot be skipped
+                inc     <5                      ; Bump data address
+                dec     <3                      ; and update length
+                bra     SKIP_1                  ; And repeat
+
+SKIP_2:
+                jmp     DROP                    ; Drop the character
+
+; SKIP ( c-addr n c == c-addr' n' )
+
+SCAN:           jsr     DO_COLON
 
                 dw      EXIT
 
@@ -1623,7 +1692,9 @@ SCAN:           jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      9,"-TRAILING"
-DASH_TRAILING:  jmp     DO_COLON
+DASH_TRAILING:  jsr     DO_COLON
+
+                dw      EXIT
 
 ; /STRING ( c-addr1 u1 n -- c-addr2 u2 )
 ;
@@ -1635,9 +1706,10 @@ DASH_TRAILING:  jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      7,"/STRING"
-SLASH_STRING:   jmp     DO_COLON
+SLASH_STRING:   jsr     DO_COLON
                 dw      ROT,OVER,PLUS
-                dw      ROT,ROT,MINUS,EXIT
+                dw      ROT,ROT,MINUS
+                dw      EXIT
 
 ; BLANK
 
@@ -1647,20 +1719,29 @@ SLASH_STRING:   jmp     DO_COLON
 ; starting at c-addr1 to that starting at c-addr2, proceeding character-by-
 ; character from lower addresses to higher addresses.
 
-		HEADER	NORMAL
-		db	5,"CMOVE"
+                HEADER  NORMAL
+                db      5,"CMOVE"
 CMOVE:
-		lda	DSTACK+1,x		; Any data to move?
-		bne	$+5
-		jmp	NEXT			; Done
-		short_a
-		lda	(DSTACK+5,x)		; Move a byte
-		sta	(DSTACK+3,x)
-		long_a
-		inc	DSTACK+5,x		; Adjust the address
-		inc	DSTACK+3,x
-		dec	DSTACK+1,x		; Adjust the count
-		bra	CMOVE			; And try again
+                phy                             ; Save IP
+                phx                             ; Save stack pointer
+                lda     <1                      ; Fetch length and save
+                pha
+                ldy     <3                      ; Fetch target address
+                lda     <5                      ; Fetch source address
+                tax
+                pla                             ; Recover length
+                beq     CMOVE_1                 ; .. No bytes to move
+                dec     a                       ; Adjust count for MVN
+                mvn     0,0                     ; Perform the move
+CMOVE_1:        plx
+                inx                             ; Clean up the stack
+                inx
+                inx
+                inx
+                inx
+                inx
+                ply                             ; Restore IP
+                jmp     NEXT
 
 ; CMOVE> ( c-addr1 c-addr2 u -- )
 ;
@@ -1668,10 +1749,10 @@ CMOVE:
 ; starting at c-addr1 to that starting at c-addr2, proceeding character-by-
 ; character from higher addresses to lower addresses.
 
-		HEADER	NORMAL
-		db	6,"CMOVE>"
+                HEADER  NORMAL
+                db      6,"CMOVE>"
 CMOVE_GREATER:
-		jmp	NEXT
+                jmp     NEXT
 
 ; COMPARE
 
@@ -1686,7 +1767,7 @@ CMOVE_GREATER:
 
                 HEADER  IMMEDIATE
                 db      5,"+LOOP"
-PLUS_LOOP:      jmp     DO_COLON
+PLUS_LOOP:      jsr     DO_COLON
 
                 dw      EXIT
 
@@ -1702,28 +1783,27 @@ DO_PLUS_LOOP:
 
                 HEADER  NORMAL
                 db      1,":"
-COLON:          jmp     DO_COLON
+COLON:          jsr     DO_COLON
 
                 dw      EXIT
 
 DO_COLON:
-                phy                             ; Save the instruction pointer
-                tay                             ; Calculate the new IP
-                iny
-                iny
-                iny
+                plx
+                phy
+                inx
+                txy
+
 NEXT:
-                lda     0,y                     ; Fetch the next word address
-                sta     WA
-                iny                             ; Bump the instruction pointer
+                tyx                             ; Copy IP to X
                 iny
-                jmp     (!WA)                   ; And execute word
+                iny
+                jmp     (0,x)                   ; Then execute word
 
 ; AGAIN
 
                 HEADER  IMMEDIATE
                 dw      5,"AGAIN"
-AGAIN:          jmp     DO_COLON
+AGAIN:          jsr     DO_COLON
 
                 dw      EXIT
 
@@ -1731,7 +1811,7 @@ AGAIN:          jmp     DO_COLON
 
                 HEADER  IMMEDIATE
                 dw      5,"BEGIN"
-BEGIN:          jmp     DO_COLON
+BEGIN:          jsr     DO_COLON
 
                 dw      EXIT
 
@@ -1742,7 +1822,7 @@ BEGIN:          jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      8,"CONSTANT"
-CONSTANT:       jmp     DO_COLON
+CONSTANT:       jsr     DO_COLON
                 dw      CREATE
                 dw      DO_LITERAL,DO_CONSTANT,BUILD
                 dw      COMMA,EXIT
@@ -1752,20 +1832,20 @@ CONSTANT:       jmp     DO_COLON
                 HEADER  NORMAL
                 db      10,"(CONSTANT)"
 DO_CONSTANT:
-                phy                             ; Save IP
-                tay                             ; Fetch constant after WA
-                lda     3,y
-                dex                             ; And push
-                dex
-                sta     DSTACK+1,x
-                ply
+                plx
+                tdc
+                dec     a
+                dec     a
+                tcd
+                lda     !1,x
+                sta     <1
                 jmp     NEXT                    ; Done
 
 ; DO ( -- )
 
                 HEADER  IMMEDIATE
                 db      2,"DO"
-DO:             jmp     DO_COLON
+DO:             jsr     DO_COLON
 
                 dw      EXIT
 
@@ -1774,21 +1854,23 @@ DO:             jmp     DO_COLON
                 HEADER  NORMAL
                 db      4,"(DO)"
 DO_DO:
-                lda     DSTACK+3,x
+                lda     <3
                 pha
-                lda     DSTACK+1,x
+                lda     <1
                 pha
-                inx
-                inx
-                inx
-                inx
+                tdc
+                inc     a
+                inc     a
+                inc     a
+                inc     a
+                tcd
                 jmp     NEXT
 
 ; ELSE
 
                 HEADER  IMMEDIATE
                 db      4,"ELSE"
-ELSE:           jmp     DO_COLON
+ELSE:           jsr     DO_COLON
 
                 dw      EXIT
 
@@ -1797,17 +1879,15 @@ ELSE:           jmp     DO_COLON
 ; Cause the IP to be loaded with the word following the link to this word.
 
 BRANCH:
-                lda     0,y                     ; Load branch address into IP
+                lda     !0,y                    ; Load branch address into IP
                 tay
                 jmp     NEXT                    ; Done
-
-
 
 ; IF
 
                 HEADER  IMMEDIATE
                 db      2,"IF"
-IF:             jmp     DO_COLON
+IF:             jsr     DO_COLON
 
                 dw      EXIT
 
@@ -1817,10 +1897,12 @@ IF:             jmp     DO_COLON
 ; link to this word, otherwise skip over it.
 
 QUERY_BRANCH:
-                lda     DSTACK+1,x              ; Pull the top of stack value
+                ldx     <1                      ; Pull the top of stack value
                 php                             ; Save the flags
-                inx                             ; Drop top item
-                inx
+                tdc
+                inc     a                       ; Drop top item
+                inc     a
+                tcd
                 plp
                 beq     BRANCH                  ; Branch if top was zero
                 iny                             ; Otherwise skip address
@@ -1833,7 +1915,7 @@ QUERY_BRANCH:
 
                 HEADER  IMMEDIATE
                 db      7,"LITERAL"
-LITERAL:        jmp     DO_COLON
+LITERAL:        jsr     DO_COLON
                 dw      DO_LITERAL,DO_LITERAL,COMMA
                 dw      COMMA,EXIT
 
@@ -1844,19 +1926,21 @@ LITERAL:        jmp     DO_COLON
                 HEADER  NORMAL
                 db      10,"(LITERAL)"
 DO_LITERAL:
-                lda     0,y                     ; Fetch constant from IP
+                tdc
+                dec     a
+                dec     a
+                tcd
+                lda     !0,y                    ; Fetch constant from IP
                 iny
                 iny
-                dex                             ; And push
-                dex
-                sta     DSTACK+1,x
+                sta     <1
                 jmp     NEXT                    ; Done
 
 ; LOOP
 
                 HEADER  IMMEDIATE
                 db      4,"LOOP"
-LOOP:           jmp     DO_COLON
+LOOP:           jsr     DO_COLON
 
                 dw      EXIT
 
@@ -1870,58 +1954,58 @@ DO_LOOP
                 sta     1,s
                 cmp     3,s                     ; Reached limit?
                 bcs     DO_LOOP_END             ; Yes
-                lda     0,y                     ; No, branch back to start
+                lda     !0,y                    ; No, branch back to start
                 tay
                 jmp     NEXT                    ; Done
 DO_LOOP_END:    iny                             ; Skip over address
                 iny
-		pla				; Drop loop variables
-		pla
+                pla                             ; Drop loop variables
+                pla
                 jmp     NEXT                    ; Done
 
 ; USER
 
                 HEADER  NORMAL
                 db      4,"USER"
-USER:           jmp     DO_COLON
+USER:           jsr     DO_COLON
 
                 dw      EXIT
 
                 HEADER  NORMAL
                 db      6,"(USER)"
 DO_USER:
-                phy                             ; Save the IP
-                tay                             ; Fetch offset after WA
-                lda     3,y
-                clc                             ; Work out address in user area
+                tdc
+                dec     a                       ; Push on data stack
+                dec     a
+                tcd
+                plx
+                clc
+                lda     !1,x
                 adc     #USER_AREA
-                dex                             ; Push on data stack
-                dex
-                sta     DSTACK+1,x
-                ply                             ; Restore IP
+                sta     <1
                 jmp     NEXT                    ; Done
 
 ; VARIABLE
 
                 HEADER  NORMAL
                 db      8,"VARIABLE"
-VARIABLE:       jmp     DO_COLON
+VARIABLE:       jsr     DO_COLON
 
                 dw      EXIT
 
                 HEADER  NORMAL
                 db      10,"(VARIABLE)"
 DO_VARIABLE:
-                clc
-                adc     #3
-                dex
-                dex
-                sta     DSTACK+1,x
+                tdc
+                dec     a
+                dec     a
+                tcd
+                pla
+                inc     a
+                sta     <1
                 jmp     NEXT
 
-
-
-
+; S"
 
                 HEADER  IMMEDIATE
                 db      2,"S",'"'
@@ -1930,19 +2014,22 @@ S_QUOTE:
 ; (S") ( -- c-addr u )
 
 DO_S_QUOTE:
-                dex                             ; Reserve space for values
-                dex
-                dex
-                dex
+                tdc
+                dec     a                       ; Reserve space for values
+                dec     a
+                dec     a
+                dec     a
+                tcd
                 short_a
-                lda     0,y                     ; Fetch the length
+                lda     !0,y                    ; Fetch the length
+                sta     <1
+                stz     <2
                 long_a
-                and     #$00ff
-                sta     DSTACK+1,x
-                iny                             ; Save the text address
-                sty     DSTACK+3,x
+                iny
+                tya                             ; Save the text address
+                sta     <3
                 clc                             ; And update IP
-                adc     DSTACK+3,X
+                adc     <1
                 tay
                 jmp     NEXT                    ; Done
 
@@ -1960,7 +2047,7 @@ DO_S_QUOTE:
 
                 HEADER  NORMAL
                 db      2,"CR"
-CR:             jmp     DO_COLON
+CR:             jsr     DO_COLON
                 dw      DO_LITERAL,13,EMIT
                 dw      DO_LITERAL,10,EMIT
                 dw      EXIT
@@ -1975,10 +2062,12 @@ CR:             jmp     DO_COLON
                 db      4,"EMIT"
                 extern  UartTx
 EMIT:
-                lda     DSTACK+1,X              ; Fetch character from stack
+                lda     <1                      ; Fetch character from stack
                 jsr     UartTx                  ; .. and transmit
-                inx                             ; Drop the character
-                inx
+                tdc
+                inc     a                       ; Drop the character
+                inc     a
+                tcd
                 jmp     NEXT                    ; Done
 
 ; KEY ( -- char )
@@ -1997,9 +2086,12 @@ EMIT:
 KEY:
                 jsr     UartRx                  ; Receive a character
                 and     #$00ff                  ; Ensure in ASCII range
-                dex                             ; And push to stack
-                dex
-                sta     DSTACK+1,x
+                tax
+                tdc
+                dec     a                       ; And push to stack
+                dec     a
+                tcd
+                stx     <1
                 jmp     NEXT                    ; Done
 
 ; SPACE ( -- )
@@ -2012,7 +2104,7 @@ KEY:
 
                 HEADER  NORMAL
                 db      5,"SPACE"
-SPACE:          jmp     DO_COLON
+SPACE:          jsr     DO_COLON
                 dw      BL
                 dw      EMIT
                 dw      EXIT
@@ -2027,7 +2119,7 @@ SPACE:          jmp     DO_COLON
 
                 HEADER  NORMAL
                 db      6,"SPACES"
-SPACES:         jmp     DO_COLON
+SPACES:         jsr     DO_COLON
 SPACES_1:       dw      DUP,ZERO_GREATER,QUERY_BRANCH,SPACES_2
                 dw      SPACE,ONE_MINUS,BRANCH,SPACES_1
 SPACES_2:       dw      DROP,EXIT
@@ -2045,7 +2137,7 @@ SPACES_2:       dw      DROP,EXIT
 
                 HEADER  NORMAL
                 db      4,"TYPE"
-TYPE:           jmp     DO_COLON
+TYPE:           jsr     DO_COLON
                 dw      QUERY_DUP,QUERY_BRANCH,TYPE_2
                 dw      OVER,PLUS,SWAP,DO_DO
 TYPE_1:         dw      I,C_FETCH,EMIT,DO_LOOP,TYPE_1
