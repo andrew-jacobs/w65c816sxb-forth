@@ -128,7 +128,7 @@ COLD:
                 dw      ZERO,BLK,STORE
                 dw      FALSE,STATE,STORE
                 dw      CR,CR,DO_S_QUOTE
-                db      35,"HandCoded W65C816 ANS-Forth [16.02]"
+                db      35,"HandCoded W65C816 ANS-Forth [16.03]"
                 dw      TYPE,CR,CR
                 dw      ABORT
 
@@ -556,6 +556,16 @@ CELLS:
 CHAR_PLUS:
                 inc     <1                      ; Bump the address by one
                 jmp     NEXT
+		
+; CHAR- ( c-addr1 -- c-addr2 )
+;
+; Subtract the size in address units of a character to c-addr1, giving c-addr2.
+
+		HEADER	NORMAL
+		db	5,"CHAR-"
+CHAR_MINUS:
+		dec	<1
+		jmp	NEXT
 
 ; CHARS ( n1 -- n2 )
 ;
@@ -1048,9 +1058,95 @@ UMIN_EXIT:      jmp     NIP
 ; Double Precision Arithmetic
 ;------------------------------------------------------------------------------
 
-; D+
-; D-
-; DNEGATE
+; D+ ( d1|ud1 d2|ud2 -- d3|ud3 )
+;
+; Add d2|ud2 to d1|ud1, giving the sum d3|ud3.
+
+		HEADER	NORMAL
+		db	2,"D+"
+D_PLUS:
+		clc
+		lda	<7			; Add low words
+		adc	<3
+		sta	<7
+		lda	<5			; Then the high words
+		adc	<1
+		sta	<5
+		tdc				; Drop top double
+		inc	a
+		inc	a
+		inc	a
+		inc	a
+		tcd
+		jmp	NEXT			; Done
+
+; D- ( d1|ud1 d2|ud2 -- d3|ud3 )
+;
+; Subtract d2|ud2 from d1|ud1, giving the difference d3|ud3.
+
+		HEADER	NORMAL
+		db	2,"D-"
+D_MINUS:
+		sec
+		lda	<7			; Subtract low words
+		sbc	<3
+		sta	<7
+		lda	<5			; Then the high words
+		sbc	<1
+		sta	<5
+		tdc				; Drop top double
+		inc	a
+		inc	a
+		inc	a
+		inc	a
+		tcd
+		jmp	NEXT			; Done
+		
+; D2* ( xd1 -- xd2 )
+;
+; xd2 is the result of shifting xd1 one bit toward the most-significant bit,
+; filling the vacated least-significant bit with zero.
+
+		HEADER	NORMAL
+		db	3,"D2*"
+D_TWO_STAR:
+		asl	<3
+		rol	<1
+		jmp	NEXT
+
+; D2/ ( xd1 -- xd2 )
+;
+; xd2 is the result of shifting xd1 one bit toward the least-significant bit,
+; leaving the most-significant bit unchanged.
+
+		HEADER	NORMAL
+		db	3,"D2/"
+D_TWO_SLASH:
+		lda	<1
+		rol	a
+		ror	<1
+		ror	<3
+		jmp	NEXT
+
+; DABS
+; DMAX
+; DMIN
+
+; DNEGATE ( d1 -- d2 )
+;
+; d2 is the negation of d1.
+
+		HEADER	NORMAL
+		db	7,"DNEGATE"
+DNEGATE:
+		sec
+		lda	#0			; Subtract low word from zero
+		sbc	<3		
+		sta	<3
+		lda	#0			; Then the high word
+		sbc	<1
+		sta	<1
+		jmp	NEXT			; Done
 
 ;==============================================================================
 ; Mixed Arithmetic
@@ -1330,7 +1426,7 @@ DO_ABORT:
                 HEADER  NORMAL
                 db      7,"(BUILD)"
 BUILD:          jsr     DO_COLON
-                dw      DO_LITERAL,$4c,C_COMMA
+                dw      DO_LITERAL,$20,C_COMMA
                 dw      COMMA,EXIT
 
 ; CREATE ( -- ) [TODO]
@@ -1350,7 +1446,10 @@ CREATE:         jsr     DO_COLON
                 ; move name
                 dw      EXIT
 
-; EXECUTE
+; EXECUTE ( i*x xt -- j*x )
+;
+; Remove xt from the stack and perform the semantics identified by it. Other
+; stack effects are due to the word EXECUTEd.
 
                 HEADER  NORMAL
                 db      7,"EXECUTE"
@@ -1365,6 +1464,10 @@ EXECUTE:
                 rts
 
 ; EXIT ( -- ) ( R: nest-sys -- )
+;
+; Return control to the calling definition specified by nest-sys. Before
+; executing EXIT within a do-loop, a program shall discard the loop-control
+; parameters by executing UNLOOP.
 
                 HEADER  NORMAL
                 db      4,"EXIT"
@@ -1387,9 +1490,9 @@ EXIT:
 ;   DO_QUIT 0 STATE !
 ;   0 (SOURCE-ID) !
 ;   BEGIN
-;       REFILL
-;       WHILE SOURCE EVALUATE
-;       STATE @ 0= IF CR S" OK" TYPE THEN
+;     REFILL
+;     WHILE SOURCE EVALUATE
+;     STATE @ 0= IF CR S" Ok" TYPE THEN
 ;   AGAIN ;
 
                 HEADER  NORMAL
@@ -1442,14 +1545,14 @@ QUERY_NUMBER:   jsr     DO_COLON
 ;   OVER + 1- OVER      -- sa ea a
 ;   BEGIN KEY           -- sa ea a c
 ;   DUP 0D <> WHILE
-;       DUP 8 = OVER 127 = OR IF
-;             DROP 1-
-;             >R OVER R> UMAX
-;             8 EMIT SPACE 8 EMIT
-;       ELSE
-;           DUP EMIT    -- sa ea a c
-;           OVER C! 1+ OVER UMIN
-;       THEN            -- sa ea a
+;     DUP 8 = OVER 127 = OR IF
+;       DROP 1-
+;       >R OVER R> UMAX
+;       8 EMIT SPACE 8 EMIT
+;     ELSE
+;       DUP EMIT        -- sa ea a c
+;       OVER C! 1+ OVER UMIN
+;     THEN              -- sa ea a
 ;   REPEAT              -- sa ea a c
 ;   DROP NIP SWAP - ;
 
@@ -1539,17 +1642,17 @@ INTERPRET_7:    dw      DROP,EXIT
 ; by FIND while compiling may differ from those returned while not compiling.
 ;
 ;   LATEST @ BEGIN             -- a nfa
-;       2DUP OVER C@ CHAR+     -- a nfa a nfa n+1
-;       N=                     -- a nfa f
-;       DUP IF
-;           DROP
-;           NFA>LFA H@ DUP     -- a link link
-;       THEN
+;     2DUP OVER C@ CHAR+       -- a nfa a nfa n+1
+;     N=                       -- a nfa f
+;     DUP IF
+;       DROP
+;       NFA>LFA H@ DUP         -- a link link
+;     THEN
 ;   0= UNTIL                   -- a nfa  OR  a 0
 ;   DUP IF
-;       NIP DUP NFA>CFA        -- nfa xt
-;       SWAP IMMED?            -- xt iflag
-;       0= 1 OR                -- xt 1/-1
+;     NIP DUP NFA>CFA          -- nfa xt
+;     SWAP IMMED?              -- xt iflag
+;     0= 1 OR                  -- xt 1/-1
 ;   THEN ;
 
                 HEADER  NORMAL
@@ -1575,9 +1678,9 @@ FIND:           jsr     DO_COLON
 ; other action.
 ;
 ;   SOURCE-ID 0= IF
-;    TIB DUP #TIB @ ACCEPT SPACE
-;    LENGTH ! BUFFER !
-;    0 >IN ! TRUE EXIT
+;     TIB DUP #TIB @ ACCEPT SPACE
+;     LENGTH ! BUFFER !
+;     0 >IN ! TRUE EXIT
 ;   THEN
 ;   FALSE
 
@@ -1591,6 +1694,10 @@ REFILL:         jsr     DO_COLON
 REFILL_1:       dw      FALSE,EXIT
 
 ; RESTORE-INPUT
+;
+;   >IN ! (LENGTH) ! BUFFER !
+;   SOURCEID !
+;   TRUE
 
                 HEADER  NORMAL
                 db      13,"RESTORE-INPUT"
@@ -1656,10 +1763,13 @@ WORD:           jsr     DO_COLON
                 dw      DUP,SOURCE,TO_IN,FETCH,SLASH_STRING
                 dw      DUP,TO_R,ROT,SKIP
                 dw      OVER,TO_R,ROT,SCAN
-
-                ; TODO
-
-                dw      EXIT
+		dw	DUP,QUERY_BRANCH,WORD_1,CHAR_MINUS
+WORD_1:		dw	R_FROM,R_FROM,ROT,MINUS,TO_IN,PLUS_STORE
+		dw	TUCK,MINUS
+		dw	HERE,TO_COUNTED
+		dw	HERE
+		dw	BL,OVER,COUNT,PLUS,C_STORE
+		dw	EXIT
 
 ; SKIP ( c-addr n c == c-addr' n' )
 
@@ -1898,12 +2008,11 @@ IF:             jsr     DO_COLON
 
 QUERY_BRANCH:
                 ldx     <1                      ; Pull the top of stack value
-                php                             ; Save the flags
                 tdc
                 inc     a                       ; Drop top item
                 inc     a
                 tcd
-                plp
+                txa
                 beq     BRANCH                  ; Branch if top was zero
                 iny                             ; Otherwise skip address
                 iny
@@ -1924,7 +2033,7 @@ LITERAL:        jsr     DO_COLON
 ; Place x on the stack.
 
                 HEADER  NORMAL
-                db      10,"(LITERAL)"
+                db      9,"(LITERAL)"
 DO_LITERAL:
                 tdc
                 dec     a
@@ -1985,12 +2094,18 @@ DO_USER:
                 sta     <1
                 jmp     NEXT                    ; Done
 
-; VARIABLE
+; VARIABLE ( “<spaces>name” -- )
+;
+; Skip leading space delimiters. Parse name delimited by a space. Create a
+; definition for name with the execution semantics defined below. Reserve one
+; cell of data space at an aligned address.
 
                 HEADER  NORMAL
                 db      8,"VARIABLE"
 VARIABLE:       jsr     DO_COLON
-
+                dw      CREATE
+                dw      DO_LITERAL,DO_VARIABLE,BUILD
+                dw      DO_LITERAL,1,CELLS,ALLOT
                 dw      EXIT
 
                 HEADER  NORMAL
@@ -2100,7 +2215,7 @@ KEY:
 ;
 ; In this implementation it is defined as
 ;
-;   SPACE EMIT
+;   BL EMIT
 
                 HEADER  NORMAL
                 db      5,"SPACE"
