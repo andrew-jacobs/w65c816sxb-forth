@@ -53,4 +53,5 @@ w65c816sxb.obj: \
 
 ans-forth.obj: \
 		w65c816.inc \
+		device.asm \
 		ans-forth.asm

@@ -169,8 +169,7 @@ COLD:
                 dw      STORE
                 dw      CR
                 dw      CR
-                dw      DO_S_QUOTE
-                db      35,"HandCoded W65C816 ANS-Forth [16.03]"
+                dw      TITLE
                 dw      TYPE
                 dw      CR
                 dw      CR
@@ -971,8 +970,10 @@ MINUS:
 ; /
 
                 HEADER  1,"/",NORMAL
-SLASH:
-                CONTINUE                        ; Done
+SLASH:          jsr     DO_COLON
+                dw      SLASH_MOD
+                dw      NIP
+                dw      EXIT
 
 ; /MOD
 
@@ -1031,8 +1032,34 @@ ABS:
                 CONTINUE                        ; Done
 
 ; MAX
+
+                HEADER  3,"MAX",NORMAL
+MAX:            jsr     DO_COLON
+                dw      TWO_DUP
+                dw      LESS
+                dw      QUERY_BRANCH,MAX_1
+                dw      SWAP
+MAX_1:          dw      DROP
+                dw      EXIT
+
 ; MIN
+
+                HEADER  3,"MIN",NORMAL
+MIN:            jsr     DO_COLON
+                dw      TWO_DUP
+                dw      GREATER
+                dw      QUERY_BRANCH,MIN_1
+                dw      SWAP
+MIN_1:          dw      DROP
+                dw      EXIT
+
 ; MOD
+
+                HEADER  3,"MOD",NORMAL
+MOD:            jsr     DO_COLON
+                dw      SLASH_MOD
+                dw      DROP
+                dw      EXIT
 
 ; NEGATE ( n1 -- n2 )
 ;
@@ -1241,13 +1268,13 @@ UM_STAR_1:      lda     <3                      ; Shift multiplier one bit
                 lsr     a
                 bcc     UM_STAR_2               ; Not set, no add
                 lda     1,s                     ; Fetch multiplicand
+                clc
                 adc     <1
                 sta     <1
 UM_STAR_2:      ror     <1                      ; Rotate high word down
                 ror     <3
                 dex
                 bne     UM_STAR_1
-                pla
                 pla
                 CONTINUE                        ; Done
 
@@ -1313,6 +1340,7 @@ LESS:
                 inc     a
                 inc     a
                 tcd
+                txa
                 sec                             ; Compare with x1
                 sbc     <1
                 stz     <1                      ; Assume false result
@@ -1626,6 +1654,7 @@ DO_QUIT:
 ;------------------------------------------------------------------------------
 
 ; ?NUMBER
+;
 ;   DUP  0 0 ROT COUNT      -- ca ud adr n
 ;   ?SIGN >R  >NUMBER       -- ca ud adr' n'
 ;   IF   R> 2DROP 2DROP 0   -- ca 0   (error)
@@ -1657,7 +1686,7 @@ QNUM_1:         dw      TWO_DROP
 QNUM_2:         dw      DO_LITERAL,-1
 QNUM_3:         dw      EXIT
 
-; ?SIGN
+; ?SIGN ( c-addr n -- adr' n' f )
 ;
 ;   OVER C@                 -- adr n c
 ;   2C - DUP ABS 1 = AND    -- +=-1, -=+1, else 0
@@ -1665,7 +1694,7 @@ QNUM_3:         dw      EXIT
 ;       >R 1 /STRING R>     -- adr' n' f
 ;   THEN ;
 
-                HEADER  4,"?SIGN",NORMAL
+                HEADER  5,"?SIGN",NORMAL
 QUERY_SIGN:     jsr     DO_COLON
                 dw      OVER
                 dw      C_FETCH
@@ -1685,9 +1714,9 @@ QUERY_SIGN:     jsr     DO_COLON
                 dw      R_FROM
 QSIGN_1:        dw      EXIT
 
-; >COUNTED
+; >COUNTED ( c-addr n -- )
 ;
-; 2DUP C! CHAR+ SWAP CMOVE
+;   2DUP C! CHAR+ SWAP CMOVE
 
 TO_COUNTED:     jsr     DO_COLON
                 dw      TWO_DUP
@@ -1697,7 +1726,9 @@ TO_COUNTED:     jsr     DO_COLON
                 dw      CMOVE
                 dw      EXIT
 
-; >NUMBER
+; >NUMBER ( ud adr u -- ud' adr' u' )
+;
+;
 ;   BEGIN
 ;   DUP WHILE
 ;       OVER C@ DIGIT?
@@ -1880,7 +1911,8 @@ EVALUATE:       jsr     DO_COLON
 ;           IF EXECUTE ELSE , THEN
 ;       ELSE                    -- textadr
 ;           ?NUMBER
-;           IF POSTPONE LITERAL     converted ok
+;           IF STATE @
+;               IF POSTPONE LITERAL THEN     converted ok
 ;           ELSE COUNT TYPE 3F EMIT CR ABORT  err
 ;           THEN
 ;       THEN
@@ -1908,6 +1940,9 @@ INTERPRET_2:    dw      COMMA
 INTERPRET_3:    dw      BRANCH,INTERPRET_6
 INTERPRET_4:    dw      QUERY_NUMBER
                 dw      QUERY_BRANCH,INTERPRET_5
+                dw      STATE
+                dw      FETCH
+                dw      QUERY_BRANCH,INTERPRET_6
                 dw      LITERAL
                 dw      BRANCH,INTERPRET_6
 INTERPRET_5:    dw      COUNT
@@ -2329,7 +2364,9 @@ COMPARE:
 
 ; COUNT
 ;
-; DUP CHAR+ SWAP C@
+; In this implementation it is defined as
+;
+;   DUP CHAR+ SWAP C@
 
                 HEADER  5,"COUNT",NORMAL
 COUNT:          jsr     DO_COLON
@@ -2355,12 +2392,51 @@ PLUS_LOOP:      jsr     DO_COLON
 
                 dw      EXIT
 
+; ( ( -- )
+
+;  [ HEX ] 29 WORD DROP ; IMMEDIATE
+
+                HEADER  1,"(",IMMEDIATE
+                jsr     DO_COLON
+                dw      DO_LITERAL,')'
+                dw      WORD
+                dw      DROP
+                dw      EXIT
+
 ; (+LOOP)
 
                 HEADER  7,"(+LOOP)",NORMAL
 DO_PLUS_LOOP:
 
                 CONTINUE
+
+; (BRANCH) ( -- )
+;
+; Cause the IP to be loaded with the word following the link to this word.
+
+                HEADER  8,"(BRANCH)",NORMAL
+BRANCH:
+                lda     !0,y                    ; Load branch address into IP
+                tay
+                CONTINUE                        ; Done
+
+; (?BRANCH) ( flag -- )
+;
+; If flag is false then cause the IP to be loaded with the word following the
+; link to this word, otherwise skip over it.
+
+                HEADER  9,"(?BRANCH)",NORMAL
+QUERY_BRANCH:
+                ldx     <1                      ; Pull the top of stack value
+                tdc
+                inc     a                       ; Drop top item
+                inc     a
+                tcd
+                txa
+                beq     BRANCH                  ; Branch if top was zero
+                iny                             ; Otherwise skip address
+                iny
+                CONTINUE                        ; Done
 
 ; : ( -- )
 
@@ -2447,40 +2523,12 @@ ELSE:           jsr     DO_COLON
 
                 dw      EXIT
 
-; (BRANCH) ( -- )
-;
-; Cause the IP to be loaded with the word following the link to this word.
-
-                HEADER  8,"(BRANCH)",NORMAL
-BRANCH:
-                lda     !0,y                    ; Load branch address into IP
-                tay
-                CONTINUE                        ; Done
-
 ; IF
 
                 HEADER  2,"IF",IMMEDIATE
 IF:             jsr     DO_COLON
 
                 dw      EXIT
-
-; (?BRANCH) ( flag -- )
-;
-; If flag is false then cause the IP to be loaded with the word following the
-; link to this word, otherwise skip over it.
-
-                HEADER  9,"(?BRANCH)",NORMAL
-QUERY_BRANCH:
-                ldx     <1                      ; Pull the top of stack value
-                tdc
-                inc     a                       ; Drop top item
-                inc     a
-                tcd
-                txa
-                beq     BRANCH                  ; Branch if top was zero
-                iny                             ; Otherwise skip address
-                iny
-                CONTINUE                        ; Done
 
 ; LITERAL ( x -- )
 ;
@@ -2535,49 +2583,15 @@ DO_LOOP_END:    iny                             ; Skip over address
                 pla
                 CONTINUE                        ; Done
 
-; USER
+; RECURSE
 
-                HEADER  4,"USER",NORMAL
-USER:           jsr     DO_COLON
-
+                HEADER  7,"RECURSE",IMMEDIATE
+                jsr     DO_COLON
+                dw      LATEST
+                dw      FETCH
+                dw      NFA_TO_CFA
+                dw      COMMA
                 dw      EXIT
-
-                HEADER  6,"(USER)",NORMAL
-DO_USER:
-                tdc
-                dec     a                       ; Push on data stack
-                dec     a
-                tcd
-                plx
-                clc
-                lda     !1,x
-                adc     #USER_AREA
-                sta     <1
-                CONTINUE                        ; Done
-
-; VARIABLE ( “<spaces>name” -- )
-;
-; Skip leading space delimiters. Parse name delimited by a space. Create a
-; definition for name with the execution semantics defined below. Reserve one
-; cell of data space at an aligned address.
-
-                LINK    NORMAL
-                db      8,"VARIABLE"
-VARIABLE:       jsr     DO_COLON
-                dw      CREATE
-                dw      DO_LITERAL,DO_VARIABLE,BUILD
-                dw      DO_LITERAL,1,CELLS,ALLOT
-                dw      EXIT
-
-DO_VARIABLE:
-                tdc
-                dec     a
-                dec     a
-                tcd
-                pla
-                inc     a
-                sta     <1
-                CONTINUE
 
 ; S"
 
@@ -2607,6 +2621,105 @@ DO_S_QUOTE:
                 adc     <1
                 tay
                 CONTINUE                        ; Done
+
+; USER
+
+                HEADER  4,"USER",NORMAL
+USER:           jsr     DO_COLON
+                dw      CREATE
+                dw      DO_LITERAL,DO_USER
+                dw      BUILD
+                dw      COMMA
+                dw      EXIT
+
+                HEADER  6,"(USER)",NORMAL
+DO_USER:
+                tdc
+                dec     a                       ; Push on data stack
+                dec     a
+                tcd
+                plx
+                clc
+                lda     !1,x
+                adc     #USER_AREA
+                sta     <1
+                CONTINUE                        ; Done
+
+; VARIABLE ( “<spaces>name” -- )
+;
+; Skip leading space delimiters. Parse name delimited by a space. Create a
+; definition for name with the execution semantics defined below. Reserve one
+; cell of data space at an aligned address.
+
+                LINK    NORMAL
+                db      8,"VARIABLE"
+VARIABLE:       jsr     DO_COLON
+                dw      CREATE
+                dw      DO_LITERAL,DO_VARIABLE
+                dw      BUILD
+                dw      DO_LITERAL,1
+                dw      CELLS
+                dw      ALLOT
+                dw      EXIT
+
+DO_VARIABLE:
+                tdc
+                dec     a
+                dec     a
+                tcd
+                pla
+                inc     a
+                sta     <1
+                CONTINUE
+
+; WORDS
+;
+;   LATEST @ BEGIN
+;       DUP COUNT TYPE SPACE
+;       NFA>LFA @
+;   DUP 0= UNTIL
+;   DROP ;
+
+                HEADER  5,"WORDS",NORMAL
+                jsr     DO_COLON
+                dw      LATEST
+                dw      FETCH
+WORDS_1:        dw      DUP
+                dw      COUNT
+                dw      TYPE
+                dw      SPACE
+                dw      NFA_TO_LFA
+                dw      FETCH
+                dw      DUP
+                dw      ZERO_EQUAL
+                dw      QUERY_BRANCH,WORDS_1
+                dw      DROP
+                dw      EXIT
+
+; [
+;
+; In this implementation it is defined as
+;
+;   0 STATE !
+
+                HEADER  1,"[",IMMEDIATE
+                jsr     DO_COLON
+                dw      ZERO
+                dw      STATE
+                dw      STORE
+                dw      EXIT
+
+; ]
+;
+; In this implementation it is defined as
+;
+;   -1 STATE !
+                HEADER  1,"]",NORMAL
+                jsr     DO_COLON
+                dw      DO_LITERAL,-1
+                dw      STATE
+                dw      STORE
+                dw      EXIT
 
 ;==============================================================================
 ; I/O Operations
@@ -2737,7 +2850,90 @@ TYPE_3          dw      EXIT
 ; SIGN
 
 ;================================================================================
+; Debugging Words
 ;--------------------------------------------------------------------------------
+
+; .NYBBLE
+
+                HEADER  7,".NYBBLE",NORMAL
+DOT_NYBBLE:
+                lda     <1
+                and     #$000f
+                ora     #$0030
+                cmp     #$003a
+                bcc     $+5
+                adc     #$0006
+                jsr     UartTx
+                jmp     DROP
+
+; .BYTE
+
+                HEADER  5,".BYTE",NORMAL
+DOT_BYTE:       jsr     DO_COLON
+                dw      DUP
+                dw      DO_LITERAL,4
+                dw      RSHIFT
+                dw      DOT_NYBBLE
+                dw      DOT_NYBBLE
+                dw      SPACE
+                dw      EXIT
+
+; .WORD
+
+                HEADER  5,".WORD",NORMAL
+DOT_WORD:       jsr     DO_COLON
+                dw      DUP
+                dw      DO_LITERAL,12
+                dw      RSHIFT
+                dw      DOT_NYBBLE
+                dw      DUP
+                dw      DO_LITERAL,8
+                dw      RSHIFT
+                dw      DOT_NYBBLE
+                dw      DUP
+                dw      DO_LITERAL,4
+                dw      RSHIFT
+                dw      DOT_NYBBLE
+                dw      DOT_NYBBLE
+                dw      SPACE
+                dw      EXIT
+
+; .DP
+
+                HEADER  3,".DP",NORMAL
+                jsr     DO_COLON
+                dw      AT_DP
+                dw      DOT_WORD
+                dw      EXIT
+
+                HEADER  3,".RP",NORMAL
+                jsr     DO_COLON
+                dw      AT_RP
+                dw      DOT_WORD
+                dw      EXIT
+
+                HEADER  3,"@DP",NORMAL
+AT_DP:
+                phd
+                tdc
+                dec     a
+                dec     a
+                tcd
+                pla
+                sta     <1
+                CONTINUE
+
+                HEADER  3,"@RP",NORMAL
+AT_RP:
+                tdc
+                dec     a
+                dec     a
+                tcd
+                tsx
+                stx     <1
+                CONTINUE
+
+                include "device.asm"
 
                 TRAILER
 NEXT_WORD:
