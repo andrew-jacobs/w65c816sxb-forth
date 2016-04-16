@@ -31,7 +31,6 @@
 ; Some of the high-level definitions are based on Bradford J. Rodriguez's
 ; CamelForth implementations.
 ;
-;==============================================================================
 ;------------------------------------------------------------------------------
 
                 pw      132
@@ -655,9 +654,30 @@ TWO_OVER:
                 sta     <3
                 CONTINUE                        ; Done
 
-; 2ROT
+; 2ROT ( x1 x2 x3 x4 x5 x6 -- x3 x4 x5 x6 x1 x2 )
+;
+; Rotate the top three cell pairs on the stack bringing cell pair x1 x2 to
+; the top of the stack.
 
-; TODO
+                HEADER  4,"2ROT",NORMAL
+TWO_ROT:        jsr     DO_COLON
+                lda     <11                     ; Save x1
+                pha
+                lda     <9                      ; Save x2
+                pha
+                lda     <7                      ; Move x3
+                sta     <11
+                lda     <5                      ; Move x4
+                sta     <9
+                lda     <3                      ; Move x5
+                sta     <7
+                lda     <1                      ; Move x6
+                sta     <5
+                pla                             ; Restore x2
+                sta     <1
+                pla                             ; Restore x1
+                sta     <3
+                CONTINUE                        ; Done
 
 ; 2SWAP ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
 ;
@@ -739,6 +759,16 @@ OVER:
                 sta     <1                      ; And make a copy
                 CONTINUE                        ; Done
 
+; PICK ( xu ... x1 x0 u -- xu ... x1 x0 xu )
+;
+; Remove u. Copy the xu to the top of the stack. An ambiguous condition exists
+; if there are less than u+2 items on the stack before PICK is executed.
+
+; TODO
+                HEADER  4,"PICK",NORMAL
+PICK:
+                CONTINUE
+
 ; SWAP ( x1 x2 -- x2 x1 )
 ;
 ; Exchange the top two stack items.
@@ -765,7 +795,16 @@ ROT:
                 stx     <1                      ; Restore x1
                 CONTINUE
 
-; ROLL [TODO]
+; ROLL ( xu xu-1 ... x0 u -- xu-1 ... x0 xu )
+;
+; Remove u. Rotate u+1 items on the top of the stack. An ambiguous condition
+; exists if there are less than u+2 items on the stack before ROLL is executed.
+
+; TODO
+
+                HEADER  4,"ROLL",NORMAL
+ROLL:
+                CONTINUE
 
 ; TUCK ( x1 x2 -- x2 x1 x2 )
 ;
@@ -1565,14 +1604,19 @@ BUILD:          jsr     DO_COLON
 
                 HEADER  6,"CREATE",NORMAL
 CREATE:         jsr     DO_COLON
-                ; parse
-                dw      HERE
-                dw      LATEST,FETCH,COMMA
+                dw      LATEST
+                dw      FETCH
+                dw      COMMA
                 dw      ZERO
                 dw      C_COMMA
+                dw      HERE
                 dw      LATEST
                 dw      STORE
-                ; move name
+                dw      BL
+                dw      WORD
+                dw      C_FETCH
+                dw      ONE_PLUS
+                dw      ALLOT
                 dw      EXIT
 
 ; EXECUTE ( i*x xt -- j*x )
@@ -2044,6 +2088,8 @@ NFA_TO_LFA:     jsr     DO_COLON
 ; When the input source is a string from EVALUATE, return false and perform no
 ; other action.
 ;
+; In this implementation it is defined as:
+;
 ;   SOURCE-ID 0= IF
 ;     TIB DUP #TIB @ ACCEPT SPACE
 ;     LENGTH ! BUFFER !
@@ -2074,7 +2120,16 @@ REFILL:         jsr     DO_COLON
 REFILL_1:       dw      FALSE
                 dw      EXIT
 
-; RESTORE-INPUT
+; RESTORE-INPUT ( xn ... x1 n -- flag )
+;
+; Attempt to restore the input source specification to the state described by
+; x1 through xn. flag is true if the input source specification cannot be so
+; restored.
+;
+; An ambiguous condition exists if the input source represented by the
+; arguments is not the same as the current input source.
+;
+; In this implementation it is defined as:
 ;
 ;   >IN ! (LENGTH) ! BUFFER !
 ;   SOURCEID !
@@ -2125,7 +2180,10 @@ S_EQUAL_3:
                 ply
                 CONTINUE
 
-; SAVE-INPUT
+; SAVE-INPUT ( -- xn ... x1 n )
+;
+; x1 through xn describe the current state of the input source specification
+; for later use by RESTORE-INPUT.
 
                 HEADER  10,"SAVE-INPUT",NORMAL
 SAVE_INPUT:     jsr     DO_COLON
@@ -2201,7 +2259,19 @@ SOURCE_ID:      jsr     DO_COLON
                 dw      FETCH
                 dw      EXIT
 
-; WORD
+; WORD ( char “<chars>ccc<char>” -- c-addr )
+;
+; Skip leading delimiters. Parse characters ccc delimited by char. An
+; ambiguous condition exists if the length of the parsed string is greater
+; than the implementation-defined length of a counted string.
+;
+; c-addr is the address of a transient region containing the parsed word as
+; a counted string. If the parse area was empty or contained no characters
+; other than the delimiter, the resulting string has a zero length. A space,
+; not included in the length, follows the string. A program may replace
+; characters within the string.
+;
+; In this implementation it is defined as:
 ;
 ;   DUP  SOURCE >IN @ /STRING   -- c c adr n
 ;   DUP >R   ROT SKIP           -- c adr' n'
@@ -2253,11 +2323,15 @@ WORD_1:         dw      R_FROM
 ; String Words
 ;------------------------------------------------------------------------------
 
-; -TRAILING
+; -TRAILING ( c-addr u1 -- c-addr u2 )
+;
+; If u1 is greater than zero, u2 is equal to u1 less the number of spaces at
+; the end of the character string specified by c-addr u1. If u1 is zero or the
+; entire string consists of spaces, u2 is zero.
 
                 HEADER  9,"-TRAILING",NORMAL
 DASH_TRAILING:  jsr     DO_COLON
-
+; TODO
                 dw      EXIT
 
 ; /STRING ( c-addr1 u1 n -- c-addr2 u2 )
@@ -2278,7 +2352,30 @@ SLASH_STRING:   jsr     DO_COLON
                 dw      MINUS
                 dw      EXIT
 
-; BLANK
+; BLANK ( c-addr u -- )
+;
+; If u is greater than zero, store the character value for space in u
+; consecutive character positions beginning at c-addr.
+;
+; In this implementation it is defined as
+;
+;   ?DUP IF OVER + SWAP DO BL I C! LOOP ELSE DROP THEN
+
+                HEADER  5,"BLANK",NORMAL
+BLANK:          jsr     DO_COLON
+                dw      QUERY_DUP
+                dw      QUERY_BRANCH,BLANK_2
+                dw      OVER
+                dw      PLUS
+                dw      SWAP
+                dw      DO_DO
+BLANK_1:        dw      BL
+                dw      I
+                dw      C_STORE
+                dw      DO_LOOP,BLANK_1
+                dw      EXIT
+BLANK_2:        dw      DROP
+                dw      EXIT
 
 ; CMOVE ( c-addr1 c-addr2 u -- )
 ;
@@ -2349,20 +2446,16 @@ CMOVE_GT_2:
 ; c-addr2 u2 and one (1) otherwise.
 
                 HEADER  7,"COMPARE",NORMAL
-COMPARE:
-                phy
-
+COMPARE:        jsr     DO_COLON
 ; TODO
+                CONTINUE
 
-                tdc
-                clc
-                adc     #6
-                tcd
-                stx     <1
-                ply
-                CONTINUE                        ; Done
-
-; COUNT
+; COUNT ( c-addr1 -- c-addr2 u )
+;
+; Return the character string specification for the counted string stored at
+; c-addr1. c-addr2 is the address of the first character after c-addr1. u is
+; the contents of the character at c-addr1, which is the length in characters
+; of the string at c-addr2.
 ;
 ; In this implementation it is defined as
 ;
@@ -2376,10 +2469,17 @@ COUNT:          jsr     DO_COLON
                 dw      C_FETCH
                 dw      EXIT
 
-; SEARCH
+; SEARCH ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 flag )
+;
+; Search the string specified by c-addr1 u1 for the string specified by c-addr2
+; u2. If flag is true, a match was found at c-addr3 with u3 characters
+; remaining. If flag is false there was no match and c-addr3 is c-addr1 and u3
+; is u1.
 
-
-
+                HEADER  6,"SEARCH",NORMAL
+SEARCH:         jsr     DO_COLON
+; TODO
+                CONTINUE
 
 ;==============================================================================
 ; Compiling Words
@@ -2442,7 +2542,12 @@ QUERY_BRANCH:
 
                 HEADER  1,":",NORMAL
 COLON:          jsr     DO_COLON
-
+                dw      CREATE
+                dw      DO_LITERAL,$20
+                dw      C_COMMA
+                dw      DO_LITERAL,DO_COLON
+                dw      COMMA
+                dw      RIGHT_BRACKET
                 dw      EXIT
 
 DO_COLON:
@@ -2452,18 +2557,30 @@ DO_COLON:
                 txy
                 CONTINUE                        ; Done
 
-; AGAIN
+; ; ( -- )
+
+                LINK    IMMEDIATE
+                db      1,";"
+SEMICOLON:      jsr     DO_COLON
+                dw      DO_LITERAL,EXIT
+                dw      COMMA
+                dw      LEFT_BRACKET
+                dw      EXIT
+
+; AGAIN ( -- )
 
                 HEADER  5,"AGAIN",IMMEDIATE
 AGAIN:          jsr     DO_COLON
-
+                dw      DO_LITERAL,BRANCH
+                dw      COMMA
+                dw      COMMA
                 dw      EXIT
 
-; BEGIN
+; BEGIN ( -- )
 
                 HEADER  5,"BEGIN",IMMEDIATE
 BEGIN:          jsr     DO_COLON
-
+                dw      HERE
                 dw      EXIT
 
 ; CONSTANT ( x “<spaces>name” -- )
@@ -2496,7 +2613,9 @@ DO_CONSTANT:
 
                 HEADER  2,"DO",IMMEDIATE
 DO:             jsr     DO_COLON
-
+                dw      DO_LITERAL,DO_DO
+                dw      COMMA
+                dw      HERE
                 dw      EXIT
 
 ; (DO) ( -- )
@@ -2516,18 +2635,29 @@ DO_DO:
                 tcd
                 CONTINUE
 
-; ELSE
+; ELSE ( -- )
 
                 HEADER  4,"ELSE",IMMEDIATE
 ELSE:           jsr     DO_COLON
-
+                dw      DO_LITERAL,BRANCH
+                dw      COMMA
+                dw      HERE
+                dw      ZERO
+                dw      COMMA
+                dw      HERE
+                dw      SWAP
+                dw      STORE
                 dw      EXIT
 
-; IF
+; IF ( -- )
 
                 HEADER  2,"IF",IMMEDIATE
 IF:             jsr     DO_COLON
-
+                dw      DO_LITERAL,QUERY_BRANCH
+                dw      COMMA
+                dw      HERE
+                dw      ZERO
+                dw      COMMA
                 dw      EXIT
 
 ; LITERAL ( x -- )
@@ -2561,7 +2691,9 @@ DO_LITERAL:
 
                 HEADER  4,"LOOP",IMMEDIATE
 LOOP:           jsr     DO_COLON
-
+                dw      DO_LITERAL,DO_LOOP
+                dw      COMMA
+                dw      COMMA
                 dw      EXIT
 
 ; (LOOP)
@@ -2583,10 +2715,10 @@ DO_LOOP_END:    iny                             ; Skip over address
                 pla
                 CONTINUE                        ; Done
 
-; RECURSE
+; RECURSE ( -- )
 
                 HEADER  7,"RECURSE",IMMEDIATE
-                jsr     DO_COLON
+RECURSE:        jsr     DO_COLON
                 dw      LATEST
                 dw      FETCH
                 dw      NFA_TO_CFA
@@ -2621,6 +2753,24 @@ DO_S_QUOTE:
                 adc     <1
                 tay
                 CONTINUE                        ; Done
+
+; THEN ( -- )
+
+                HEADER  4,"THEN",IMMEDIATE
+THEN:           jsr     DO_COLON
+                dw      HERE
+                dw      SWAP
+                dw      STORE
+                dw      EXIT
+
+; UNTIL ( -- )
+
+                HEADER  5,"UNTIL",IMMEDIATE
+UNTIL:          jsr     DO_COLON
+                dw      DO_LITERAL,QUERY_BRANCH
+                dw      COMMA
+                dw      COMMA
+                dw      EXIT
 
 ; USER
 
@@ -2672,7 +2822,7 @@ DO_VARIABLE:
                 sta     <1
                 CONTINUE
 
-; WORDS
+; WORDS ( -- )
 ;
 ;   LATEST @ BEGIN
 ;       DUP COUNT TYPE SPACE
@@ -2703,7 +2853,7 @@ WORDS_1:        dw      DUP
 ;   0 STATE !
 
                 HEADER  1,"[",IMMEDIATE
-                jsr     DO_COLON
+LEFT_BRACKET:   jsr     DO_COLON
                 dw      ZERO
                 dw      STATE
                 dw      STORE
@@ -2714,8 +2864,9 @@ WORDS_1:        dw      DUP
 ; In this implementation it is defined as
 ;
 ;   -1 STATE !
+
                 HEADER  1,"]",NORMAL
-                jsr     DO_COLON
+RIGHT_BRACKET:  jsr     DO_COLON
                 dw      DO_LITERAL,-1
                 dw      STATE
                 dw      STORE
