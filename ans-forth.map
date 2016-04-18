@@ -25,7 +25,7 @@ Section vectors:
 
 Section forth:
 	00000400 _BEG_FORTH
-	000017b1 _END_FORTH
+	000019f0 _END_FORTH
 
 ABSOLUTES:
 	00000400 Start

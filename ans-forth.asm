@@ -1,4 +1,4 @@
-;==============================================================================
+;===============================================================================
 ;     _    _   _ ____    _____          _   _       _  ___  _  __
 ;    / \  | \ | / ___|  |  ___|__  _ __| |_| |__   ( )( _ )/ |/ /_
 ;   / _ \ |  \| \___ \  | |_ / _ \| '__| __| '_ \  |/ / _ \| | '_ \
@@ -6,7 +6,7 @@
 ; /_/   \_\_| \_|____/  |_|  \___/|_|   \__|_| |_|    \___/|_|\___/
 ;
 ; A Direct Threaded ANS Forth for the WDC 65C816
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 ; Copyright (C)2015-2016 HandCoded Software Ltd.
 ; All rights reserved.
 ;
@@ -16,7 +16,7 @@
 ;
 ; http://creativecommons.org/licenses/by-nc-sa/4.0/
 ;
-;==============================================================================
+;===============================================================================
 ; Notes:
 ;
 ; This implementation is designed to run in the 65C816's native mode with both
@@ -31,7 +31,7 @@
 ; Some of the high-level definitions are based on Bradford J. Rodriguez's
 ; CamelForth implementations.
 ;
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
                 pw      132
                 inclist on
@@ -43,9 +43,9 @@
 
                 include "w65c816.inc"
 
-;==============================================================================
+;===============================================================================
 ; Macros
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; The LINK macro deposits the link section of a word header automatically
 ; linking the new word to the last.
@@ -89,9 +89,9 @@ TRAILER         macro
 LAST_WORD       equ     WORD@<WORDZ>
                 endm
 
-;==============================================================================
+;===============================================================================
 ; Definitions
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 USER_SIZE       equ     20
 DSTACK_SIZE     equ     128
@@ -110,9 +110,9 @@ LENGTH_OFFSET   equ     18                      ; Length of the input buffer
 
 TIB_SIZE        equ     128
 
-;==============================================================================
+;===============================================================================
 ; Data Areas
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
                 page0
                 org     $00
@@ -132,9 +132,9 @@ RSTACK_END      equ     RSTACK_START+RSTACK_SIZE
 
 TIB_AREA        ds      TIB_SIZE                ; Terminal Input Buffer
 
-;==============================================================================
+;===============================================================================
 ; Forth Entry Point
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 FORTH           section OFFSET $0400
 
@@ -168,15 +168,15 @@ COLD:
                 dw      STORE
                 dw      CR
                 dw      CR
-                dw      TITLE
+                dw      DO_TITLE
                 dw      TYPE
                 dw      CR
                 dw      CR
                 dw      ABORT
 
-;==============================================================================
+;===============================================================================
 ; System/User Variables
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; #TIB ( -- a-addr )
 ;
@@ -219,7 +219,7 @@ BLK:            jsr     DO_USER
 
 ; (BUFFER)
 
-                HEADER  8,"(BUFFER)",NORMAL
+;               HEADER  8,"(BUFFER)",NORMAL
 BUFFER:         jsr     DO_USER
                 dw      BUFFER_OFFSET
 
@@ -239,7 +239,7 @@ LATEST:         jsr     DO_USER
 
 ; (LENGTH)
 
-                HEADER  8,"(LENGTH)",NORMAL
+;               HEADER  8,"(LENGTH)",NORMAL
 LENGTH:         jsr     DO_USER
                 dw      LENGTH_OFFSET
 
@@ -254,7 +254,7 @@ SCR:            jsr     DO_USER
 
 ; (SOURCE-ID)
 
-                HEADER  11,"(SOURCE-ID)",NORMAL
+;               HEADER  11,"(SOURCE-ID)",NORMAL
 SOURCEID:       jsr     DO_USER
                 dw      SOURCEID_OFFSET
 
@@ -276,9 +276,9 @@ STATE:          jsr     DO_USER
 TIB:            jsr     DO_CONSTANT
                 dw      TIB_AREA
 
-;==============================================================================
+;===============================================================================
 ; Constants
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; 0 ( -- 0 )
 ;
@@ -334,9 +334,9 @@ TRUE:
                 dec     <1
                 CONTINUE                        ; Done
 
-;==============================================================================
+;===============================================================================
 ; Radix
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; DECIMAL ( -- )
 ;
@@ -360,9 +360,9 @@ HEX:            jsr     DO_COLON
                 dw      STORE
                 dw      EXIT
 
-;==============================================================================
+;===============================================================================
 ; Memory Operations
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; ! ( x a-addr -- )
 ;
@@ -535,9 +535,9 @@ HERE:           jsr     DO_COLON
                 dw      FETCH
                 dw      EXIT
 
-;==============================================================================
+;===============================================================================
 ; Alignment
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; ALIGN ( -- )
 ;
@@ -600,9 +600,9 @@ CHAR_MINUS:
 CHARS:
                 CONTINUE                        ; Done
 
-;==============================================================================
+;===============================================================================
 ; Stack Operations
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; 2DROP ( x1 x2 -- )
 ;
@@ -709,6 +709,17 @@ QUERY_DUP:
                 bne     DUP                     ; Non-zero value?
                 CONTINUE                        ; Done
 
+; DEPTH ( -- n )
+
+		HEADER	5,"DEPTH",NORMAL
+DEPTH:		jsr	DO_COLON
+		dw	AT_DP
+		dw	DO_LITERAL,DSTACK_END
+		dw	SWAP
+		dw	MINUS
+		dw	TWO_SLASH
+		dw	EXIT
+
 ; DROP ( x -- )
 ;
 ; Remove x from the stack.
@@ -769,17 +780,16 @@ OVER:
 PICK:
                 CONTINUE
 
-; SWAP ( x1 x2 -- x2 x1 )
+; ROLL ( xu xu-1 ... x0 u -- xu-1 ... x0 xu )
 ;
-; Exchange the top two stack items.
+; Remove u. Rotate u+1 items on the top of the stack. An ambiguous condition
+; exists if there are less than u+2 items on the stack before ROLL is executed.
 
-                HEADER  4,"SWAP",NORMAL
-SWAP:
-                lda     <1                      ; Switch top two words
-                ldx     <3
-                sta     <3
-                stx     <1
-                CONTINUE                        ; Done
+; TODO
+
+                HEADER  4,"ROLL",NORMAL
+ROLL:
+                CONTINUE
 
 ; ROT ( x1 x2 x3 -- x2 x3 x1 )
 ;
@@ -795,16 +805,17 @@ ROT:
                 stx     <1                      ; Restore x1
                 CONTINUE
 
-; ROLL ( xu xu-1 ... x0 u -- xu-1 ... x0 xu )
+; SWAP ( x1 x2 -- x2 x1 )
 ;
-; Remove u. Rotate u+1 items on the top of the stack. An ambiguous condition
-; exists if there are less than u+2 items on the stack before ROLL is executed.
+; Exchange the top two stack items.
 
-; TODO
-
-                HEADER  4,"ROLL",NORMAL
-ROLL:
-                CONTINUE
+                HEADER  4,"SWAP",NORMAL
+SWAP:
+                lda     <1                      ; Switch top two words
+                ldx     <3
+                sta     <3
+                stx     <1
+                CONTINUE                        ; Done
 
 ; TUCK ( x1 x2 -- x2 x1 x2 )
 ;
@@ -816,9 +827,9 @@ TUCK:           jsr     DO_COLON
                 dw      OVER
                 dw      EXIT
 
-;==============================================================================
+;===============================================================================
 ; Return Stack Operations
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; 2>R ( x1 x2 -- ) ( R: -- x1 x2 )
 ;
@@ -950,9 +961,9 @@ R_FETCH:
                 sta     <1
                 CONTINUE
 
-;==============================================================================
+;===============================================================================
 ; Single Precision Arithmetic
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; * ( n1|u1 n2|u2 -- n3|u3 )
 ;
@@ -1132,9 +1143,9 @@ UMIN:
                 jmp     DROP                    ; No, x1 is
 UMIN_EXIT:      jmp     NIP
 
-;==============================================================================
+;===============================================================================
 ; Double Precision Arithmetic
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; D+ ( d1|ud1 d2|ud2 -- d3|ud3 )
 ;
@@ -1240,9 +1251,9 @@ UD_STAR:        jsr     DO_COLON
                 dw      PLUS
                 dw      EXIT
 
-;==============================================================================
+;===============================================================================
 ; Mixed Arithmetic
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 
 ; D>S ( d -- n )
@@ -1317,9 +1328,9 @@ UM_STAR_2:      ror     <1                      ; Rotate high word down
                 pla
                 CONTINUE                        ; Done
 
-;==============================================================================
+;===============================================================================
 ; Comparisons
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; 0< ( n -- flag )
 ;
@@ -1454,9 +1465,9 @@ U_GREATER:      jsr     DO_COLON
                 dw      U_LESS
                 dw      EXIT
 
-;==============================================================================
+;===============================================================================
 ; Logical Operations
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; AND ( x1 x2 -- x3 )
 ;
@@ -1564,9 +1575,9 @@ XOR:
                 tcd
                 CONTINUE
 
-;==============================================================================
+;===============================================================================
 ; Control Words
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; ABORT ( i*x -- ) ( R: j*x -- )
 ;
@@ -1587,7 +1598,7 @@ DO_ABORT:
 ;
 ; Adds a jump the to exection function for the new word.
 
-                HEADER  7,"(BUILD)",NORMAL
+;               HEADER  7,"(BUILD)",NORMAL
 BUILD:          jsr     DO_COLON
                 dw      DO_LITERAL,$20
                 dw      C_COMMA
@@ -1693,9 +1704,9 @@ DO_QUIT:
                 tcs
                 CONTINUE                        ; Done
 
-;==============================================================================
+;===============================================================================
 ; Parser & Interpreter
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; ?NUMBER
 ;
@@ -2052,7 +2063,7 @@ FIND3:          dw      EXIT
 
 ; IMMED? ( nfa -- f )
 
-                HEADER  6,"IMMED?",NORMAL
+;               HEADER  6,"IMMED?",NORMAL
 IMMED_QUERY:    jsr     DO_COLON
                 dw      ONE_MINUS
                 dw      C_FETCH
@@ -2060,7 +2071,7 @@ IMMED_QUERY:    jsr     DO_COLON
 
 ; NFA>CFA ( nfa -- cfa )
 
-                HEADER  7,"NFA>CFA",NORMAL
+;               HEADER  7,"NFA>CFA",NORMAL
 NFA_TO_CFA:     jsr     DO_COLON
                 dw      COUNT
                 dw      PLUS
@@ -2068,7 +2079,7 @@ NFA_TO_CFA:     jsr     DO_COLON
 
 ; NFA>LFA ( nfa -- lfa )
 
-                HEADER  7,"NFA>LFA",NORMAL
+;               HEADER  7,"NFA>LFA",NORMAL
 NFA_TO_LFA:     jsr     DO_COLON
                 dw      DO_LITERAL,3
                 dw      MINUS
@@ -2319,9 +2330,9 @@ WORD_1:         dw      R_FROM
                 dw      C_STORE
                 dw      EXIT
 
-;==============================================================================
+;===============================================================================
 ; String Words
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; -TRAILING ( c-addr u1 -- c-addr u2 )
 ;
@@ -2481,19 +2492,19 @@ SEARCH:         jsr     DO_COLON
 ; TODO
                 CONTINUE
 
-;==============================================================================
+;===============================================================================
 ; Compiling Words
-;------------------------------------------------------------------------------
-
-; +LOOP ( -- )
-
-                HEADER  5,"+LOOP",IMMEDIATE
-PLUS_LOOP:      jsr     DO_COLON
-
-                dw      EXIT
+;-------------------------------------------------------------------------------
 
 ; ( ( -- )
-
+;
+; Parse ccc delimited by ) (right parenthesis). ( is an immediate word.
+;
+; The number of characters in ccc may be zero to the number of characters in the
+; parse area.
+;
+; In this implementation it is defined as:
+;
 ;  [ HEX ] 29 WORD DROP ; IMMEDIATE
 
                 HEADER  1,"(",IMMEDIATE
@@ -2503,18 +2514,21 @@ PLUS_LOOP:      jsr     DO_COLON
                 dw      DROP
                 dw      EXIT
 
-; (+LOOP)
+; .(
 
-                HEADER  7,"(+LOOP)",NORMAL
-DO_PLUS_LOOP:
-
-                CONTINUE
+		HEADER	2,".(",IMMEDIATE
+DOT_PAREN:	jsr	DO_COLON
+		dw	DO_LITERAL,')'
+		dw	WORD
+		dw	COUNT
+		dw	TYPE
+		dw	EXIT
 
 ; (BRANCH) ( -- )
 ;
 ; Cause the IP to be loaded with the word following the link to this word.
 
-                HEADER  8,"(BRANCH)",NORMAL
+;               HEADER  8,"(BRANCH)",NORMAL
 BRANCH:
                 lda     !0,y                    ; Load branch address into IP
                 tay
@@ -2525,7 +2539,7 @@ BRANCH:
 ; If flag is false then cause the IP to be loaded with the word following the
 ; link to this word, otherwise skip over it.
 
-                HEADER  9,"(?BRANCH)",NORMAL
+;               HEADER  9,"(?BRANCH)",NORMAL
 QUERY_BRANCH:
                 ldx     <1                      ; Pull the top of stack value
                 tdc
@@ -2538,15 +2552,45 @@ QUERY_BRANCH:
                 iny
                 CONTINUE                        ; Done
 
+; +LOOP ( -- )
+
+                HEADER  5,"+LOOP",IMMEDIATE
+PLUS_LOOP:      jsr     DO_COLON
+
+                dw      EXIT
+
+; (+LOOP)
+
+;               HEADER  7,"(+LOOP)",NORMAL
+DO_PLUS_LOOP:
+		ldx	<1			; Fetch increment
+		tdc				; And drop
+		inc	a
+		inc	a
+		tcd
+		clc				; Add to loop counter
+		txa
+                adc     1,s
+                sta     1,s
+                cmp     3,s                     ; Reached limit?
+                bcs     DO_PLOOP_END            ; Yes
+                lda     !0,y                    ; No, branch back to start
+                tay
+                CONTINUE                        ; Done
+
+DO_PLOOP_END:   iny                             ; Skip over address
+                iny
+                pla                             ; Drop loop variables
+                pla
+                CONTINUE                        ; Done
+
 ; : ( -- )
 
                 HEADER  1,":",NORMAL
 COLON:          jsr     DO_COLON
                 dw      CREATE
-                dw      DO_LITERAL,$20
-                dw      C_COMMA
                 dw      DO_LITERAL,DO_COLON
-                dw      COMMA
+                dw      BUILD
                 dw      RIGHT_BRACKET
                 dw      EXIT
 
@@ -2598,7 +2642,7 @@ CONSTANT:       jsr     DO_COLON
 
 ; (CONSTANT) ( -- x )
 
-                HEADER  10,"(CONSTANT)",NORMAL
+;               HEADER  10,"(CONSTANT)",NORMAL
 DO_CONSTANT:
                 plx
                 tdc
@@ -2620,8 +2664,7 @@ DO:             jsr     DO_COLON
 
 ; (DO) ( -- )
 
-                HEADER  4,"(DO)",NORMAL
-                db
+;               HEADER  4,"(DO)",NORMAL
 DO_DO:
                 lda     <3
                 pha
@@ -2675,7 +2718,7 @@ LITERAL:        jsr     DO_COLON
 ;
 ; Place x on the stack.
 
-                HEADER  9,"(LITERAL)",NORMAL
+;               HEADER  9,"(LITERAL)",NORMAL
 DO_LITERAL:
                 tdc
                 dec     a
@@ -2698,7 +2741,7 @@ LOOP:           jsr     DO_COLON
 
 ; (LOOP)
 
-                HEADER  6,"(LOOP)",NORMAL
+;               HEADER  6,"(LOOP)",NORMAL
 DO_LOOP
                 lda     1,s                     ; Add one to loop counter
                 inc     a
@@ -2859,6 +2902,21 @@ LEFT_BRACKET:   jsr     DO_COLON
                 dw      STORE
                 dw      EXIT
 
+; \ ( -- )
+;
+; Parse and discard the remainder of the parse area. \ is an immediate word.
+;
+; In this implementation it is defined as
+;
+;   1 WORD DROP
+
+		HEADER	1,"\",IMMEDIATE
+BACKSLASH:	jsr	DO_COLON
+		dw	DO_LITERAL,1
+		dw	WORD
+		dw	DROP
+		dw	EXIT
+		
 ; ]
 ;
 ; In this implementation it is defined as
@@ -2872,9 +2930,9 @@ RIGHT_BRACKET:  jsr     DO_COLON
                 dw      STORE
                 dw      EXIT
 
-;==============================================================================
+;===============================================================================
 ; I/O Operations
-;------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ; CR ( -- )
 ;
@@ -2992,21 +3050,21 @@ TYPE_1:         dw      I
 TYPE_2          dw      DROP
 TYPE_3          dw      EXIT
 
-;================================================================================
-;--------------------------------------------------------------------------------
+;===============================================================================
+;-------------------------------------------------------------------------------
 
 ; #
 ; #>
 ; #S
 ; SIGN
 
-;================================================================================
-; Debugging Words
-;--------------------------------------------------------------------------------
+;===============================================================================
+; Programming Tools
+;-------------------------------------------------------------------------------
 
 ; .NYBBLE
 
-                HEADER  7,".NYBBLE",NORMAL
+;               HEADER  7,".NYBBLE",NORMAL
 DOT_NYBBLE:
                 lda     <1
                 and     #$000f
@@ -3062,6 +3120,31 @@ DOT_WORD:       jsr     DO_COLON
                 dw      AT_RP
                 dw      DOT_WORD
                 dw      EXIT
+		
+; .S ( -- )
+
+		HEADER	2,".S",NORMAL
+		jsr	DO_COLON
+		dw	AT_DP
+		dw	ONE_PLUS
+		dw	DO_LITERAL,DSTACK_END
+		dw	SWAP
+		dw	DO_DO
+DOT_S_1:	dw	I
+		dw	FETCH
+		dw	DOT_WORD
+		dw	DO_LITERAL,2
+		dw	DO_PLUS_LOOP
+		dw	DOT_S_1
+		dw	EXIT
+		
+; ? ( a-addr -- )
+
+		HEADER	1,"?",NORMAL
+		jsr	DO_COLON
+		dw	FETCH
+		dw	DOT_WORD
+		dw	EXIT		
 
                 HEADER  3,"@DP",NORMAL
 AT_DP:
@@ -3083,6 +3166,9 @@ AT_RP:
                 tsx
                 stx     <1
                 CONTINUE
+		
+		
+;-------------------------------------------------------------------------------
 
                 include "device.asm"
 

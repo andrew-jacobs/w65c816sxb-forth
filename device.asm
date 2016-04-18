@@ -21,10 +21,38 @@
 ;
 ;------------------------------------------------------------------------------
 
-TITLE:		jsr	DO_COLON	
+; (TITLE) - ( -- )
+;
+
+; 		HEADER	7,"(TITLE)",NORMAL
+DO_TITLE:	jsr	DO_COLON	
                 dw      DO_S_QUOTE
                 db      28,"W65C816SXB ANS-Forth [16.04]"
 		dw	EXIT
+
+; BYE ( -- )
+;
+; Return control to the host operating system, if any.
+
+		HEADER	3,"BYE",NORMAL
+BYE:
+		sei
+		cld
+		emulate
+		jmp	($fffc)		; Reset the processor
+		
+; UNUSED ( -- u )
+;
+; u is the amount of space remaining in the region addressed by HERE , in
+; address units.
+
+		HEADER	6,"UNUSED",NORMAL
+UNUSED:		jsr	DO_COLON
+		dw	DO_LITERAL,$7e00
+		dw	HERE
+		dw	MINUS
+		dw	EXIT
+		
 		
 ;-------------------------------------------------------------------------------
 		
@@ -80,43 +108,153 @@ TITLE:		jsr	DO_COLON
 		jsr	DO_CONSTANT
 		dw      $7fc0
 		
-VIA1_IRB        dw      $7fc0
-VIA1_ORA        dw      $7fc1
-VIA1_IRA        dw      $7fc1
-VIA1_DDRB       dw      $7fc2
-VIA1_DDRA       dw      $7fc3
-VIA1_T1CL       dw      $7fc4
-VIA1_T1CH       dw      $7fc5
-VIA1_T1LL       dw      $7fc6
-VIA1_T1LH       dw      $7fc7
-VIA1_T2CL       dw      $7fc8
-VIA1_T2CH       dw      $7fc9
-VIA1_SR         dw      $7fca
-VIA1_ACR        dw      $7fcb
-VIA1_PCR        dw      $7fcc
-VIA1_IFR        dw      $7fcd
-VIA1_IER        dw      $7fce
-VIA1_ORAN       dw      $7fcf
-VIA1_IRAN       dw      $7fcf
+		HEADER	8,"VIA1$IRB",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc0
+		
+		HEADER	8,"VIA1$ORA",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc1
+
+		HEADER	8,"VIA1$IRA",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc1
+
+		HEADER	9,"VIA1$DDRB",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc2
+		
+		HEADER	9,"VIA1$DDRA",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc3
+
+		HEADER	9,"VIA1$T1CL",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc4
+		
+		HEADER	9,"VIA1$T1CH",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc5
+		
+		HEADER	9,"VIA1$T1LL",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc6
+		
+		HEADER	9,"VIA1$T1LH",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc7
+		
+		HEADER	9,"VIA1$T2CL",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc8
+		
+		HEADER	9,"VIA1$T2CH",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fc9
+		
+		HEADER	7,"VIA1$SR",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fca
+		
+		HEADER	8,"VIA1$ACR",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fcb
+		
+		HEADER	8,"VIA1$PCR",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fcc
+		
+		HEADER	8,"VIA1$IFR",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fcd
+		
+		HEADER	8,"VIA1$IER",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fce
+		
+		HEADER	9,"VIA1$ORAN",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fcf
+		
+		HEADER	9,"VIA1$IRAN",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fcf
 
 ;-------------------------------------------------------------------------------
 
-VIA2_ORB        dw      $7fe0
-VIA2_IRB        dw      $7fe0
-VIA2_ORA        dw      $7fe1
-VIA2_IRA        dw      $7fe1
-VIA2_DDRB       dw      $7fe2
-VIA2_DDRA       dw      $7fe3
-VIA2_T1CL       dw      $7fe4
-VIA2_T1CH       dw      $7fe5
-VIA2_T1LL       dw      $7fe6
-VIA2_T1LH       dw      $7fe7
-VIA2_T2CL       dw      $7fe8
-VIA2_T2CH       dw      $7fe9
-VIA2_SR         dw      $7fea
-VIA2_ACR        dw      $7feb
-VIA2_PCR        dw      $7fec
-VIA2_IFR        dw      $7fed
-VIA2_IER        dw      $7fee
-VIA2_ORAN       dw      $7fef
-VIA2_IRAN       dw      $7fef
+		
+		HEADER	8,"VIA2$ORB",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe0
+		
+		HEADER	8,"VIA2$IRB",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe0
+		
+		HEADER	8,"VIA2$ORA",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe1
+		
+		HEADER	8,"VIA2$IRA",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe1
+		
+		HEADER	9,"VIA2$DDRB",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe2
+		
+		HEADER	9,"VIA2$DDRA",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe3
+		
+		HEADER	9,"VIA2$T1CL",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe4
+		
+		HEADER	9,"VIA2$T1CH",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe5
+		
+		HEADER	9,"VIA2$T1LL",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe6
+		
+		HEADER	9,"VIA2$T1LH",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe7
+		
+		HEADER	9,"VIA2$T2CL",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe8
+		
+		HEADER	9,"VIA2$T2CH",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fe9
+		
+		HEADER	7,"VIA2$SR",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fea
+		
+		HEADER	8,"VIA2$ACR",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7feb
+		
+		HEADER	8,"VIA2$PCR",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fec
+		
+		HEADER	8,"VIA2$IFR",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fed
+		
+		HEADER	8,"VIA2$IER",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fee
+		
+		HEADER	9,"VIA2$ORAN",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fef
+		
+		HEADER	9,"VIA2$IRAN",NORMAL
+		jsr	DO_CONSTANT
+		dw      $7fef
