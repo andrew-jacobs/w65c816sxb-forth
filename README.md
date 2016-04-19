@@ -1,5 +1,4 @@
 # w65c816-forth
-A Direct Threaded Forth for the WDC 65C816
 
 This project builds a Forth environment for a WDC W65C816SXB which can be
 accessed via a USB serial connection to the ACIA port. (I use a cheap PL2303
@@ -26,7 +25,7 @@ A number of include files are used to support the code, namely:
 The code in this repository builds a functional Forth environment that can
 execute standard commands and compile new words.
 
-...
+```
 
 W65C816SXB ANS-Forth [16.04]
 
@@ -44,13 +43,13 @@ CR 6 SQUARE CR
 ******
 
 Ok
-...
+```
 
 I will continue to add documentation, more words and debug.
 
 ## Bugs
 
-The interpreter does not correctly convert signed numbers. Until I have tracked
-this down you have to enter expressions like '7 NEGATE' instead of -7.
+- The interpreter does not correctly convert signed numbers. Until I have tracked
+  this down you have to enter expressions like '7 NEGATE' instead of -7.
 
-The generation of new lines during command entry needs to be improved.
+- The generation of new lines during command entry needs to be improved.
