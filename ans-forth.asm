@@ -23,10 +23,12 @@
 ; the accumulator and index registers in 16-bit mode except when the word needs
 ; 8-bit memory access.
 ;
-; The Forth data stack is DP
+; The DP register is used for the Forth data stack is values can be accessed
+; using the direct-page addressing modes. The code uses the same offsets as
+; would be used with the stack relative instructions (i.e <1, <3, etc.).
 ;
-; The Y register holds the forth instruction pointer and the direct page
-; register is used to access the word address pointer and user variables.
+; The Y register holds the forth instruction pointer leaving X free for general
+; use in words. Some words push Y if they need an extra register.
 ;
 ; Some of the high-level definitions are based on Bradford J. Rodriguez's
 ; CamelForth implementations.
@@ -93,7 +95,7 @@ LAST_WORD       equ     WORD@<WORDZ>
 ; Definitions
 ;-------------------------------------------------------------------------------
 
-USER_SIZE       equ     20
+USER_SIZE       equ     22
 DSTACK_SIZE     equ     128
 RSTACK_SIZE     equ     128
 
@@ -107,8 +109,10 @@ SOURCEID_OFFSET equ     12                      ; Input source flag
 STATE_OFFSET    equ     14                      ; Compiling/Interpreting flag
 BUFFER_OFFSET   equ     16                      ; Address of the input buffer
 LENGTH_OFFSET   equ     18                      ; Length of the input buffer
+HP_OFFSET       equ     20
 
 TIB_SIZE        equ     128
+PAD_SIZE        equ     48
 
 ;===============================================================================
 ; Data Areas
@@ -130,7 +134,9 @@ RSTACK_END      equ     RSTACK_START+RSTACK_SIZE
                 data
                 org     $0200
 
-TIB_AREA        ds      TIB_SIZE                ; Terminal Input Buffer
+TIB_AREA:       ds      TIB_SIZE                ; Terminal Input Buffer
+                ds      PAD_SIZE                ; Pad area
+PAD_AREA:       ds      0
 
 ;===============================================================================
 ; Forth Entry Point
@@ -230,6 +236,13 @@ BUFFER:         jsr     DO_USER
                 HEADER  2,"DP",NORMAL
 DP:             jsr     DO_USER
                 dw      DP_OFFSET
+
+; HP ( -- a-addr )
+;
+; Hold Pointer
+
+HP:             jsr     DO_USER
+                dw      HP_OFFSET
 
 ; LATEST ( -- a-addr )
 
@@ -973,35 +986,35 @@ R_FETCH:
 ;
 ; Multiply n1|u1 by n2|u2 giving the product n3|u3.
 ;
-;	M* DROP
+;       M* DROP
 
                 HEADER  1,"*",NORMAL
-STAR:		jsr	DO_COLON
-		dw	M_STAR
-		dw	DROP
-		dw	EXIT
+STAR:           jsr     DO_COLON
+                dw      M_STAR
+                dw      DROP
+                dw      EXIT
 
 ; */
 ;
-;	*/MOD NIP
+;       */MOD NIP
 
                 HEADER  2,"*/",NORMAL
-STAR_SLASH:	jsr	DO_COLON
-		dw	STAR_SLASH_MOD
-		dw	NIP
-                dw	EXIT
+STAR_SLASH:     jsr     DO_COLON
+                dw      STAR_SLASH_MOD
+                dw      NIP
+                dw      EXIT
 
 ; */MOD
 ;
-;	>R M* R> FM/MOD
+;       >R M* R> FM/MOD
 
                 HEADER  5,"*/MOD",NORMAL
-STAR_SLASH_MOD:	jsr	DO_COLON
-		dw	TO_R
-		dw	M_STAR
-		dw	R_FROM
-		dw	FM_SLASH_MOD
-                dw	EXIT
+STAR_SLASH_MOD: jsr     DO_COLON
+                dw      TO_R
+                dw      M_STAR
+                dw      R_FROM
+                dw      FM_SLASH_MOD
+                dw      EXIT
 
 ; + ( n1|u1 n2|u2 -- n3|u3 )
 ;
@@ -1037,7 +1050,7 @@ MINUS:
 
 ; /
 ;
-;	/MOD NIP
+;       /MOD NIP
 
                 HEADER  1,"/",NORMAL
 SLASH:          jsr     DO_COLON
@@ -1047,15 +1060,15 @@ SLASH:          jsr     DO_COLON
 
 ; /MOD
 ;
-;	>R S>D R> FM/MOD
+;       >R S>D R> FM/MOD
 
                 HEADER  4,"/MOD",NORMAL
-SLASH_MOD:	jsr	DO_COLON
-		dw	TO_R
-		dw	S_TO_D
-		dw	R_FROM
-		dw	FM_SLASH_MOD
-                dw	EXIT
+SLASH_MOD:      jsr     DO_COLON
+                dw      TO_R
+                dw      S_TO_D
+                dw      R_FROM
+                dw      FM_SLASH_MOD
+                dw      EXIT
 
 ; 1+ ( n1|u1 -- n2|u2 )
 ;
@@ -1099,13 +1112,13 @@ TWO_SLASH:
 
 ; ?NEGATE
 ;
-;	0< IF NEGATE THEN
+;       0< IF NEGATE THEN
 
-QUERY_NEGATE:	jsr	DO_COLON
-		dw	ZERO_LESS
-		dw	QUERY_BRANCH,QUERY_NEGATE_1
-		dw	NEGATE
-QUERY_NEGATE_1:	dw	EXIT
+QUERY_NEGATE:   jsr     DO_COLON
+                dw      ZERO_LESS
+                dw      QUERY_BRANCH,QUERY_NEGATE_1
+                dw      NEGATE
+QUERY_NEGATE_1: dw      EXIT
 
 ; ABS ( n -- u )
 ;
@@ -1114,55 +1127,55 @@ QUERY_NEGATE_1:	dw	EXIT
                 HEADER  3,"ABS",NORMAL
 ABS:
                 lda     <1
-                bpl	ABS_1
-		jmp	NEGATE
+                bpl     ABS_1
+                jmp     NEGATE
 ABS_1:          CONTINUE                        ; Done
 
 ; FM/MOD
 ;
-;   DUP >R	      divisor 
-;   2DUP XOR >R	 sign of quotient 
-;   >R		  divisor 
-;   DABS R@ ABS UM/MOD 
-;   SWAP R> ?NEGATE SWAP	apply sign to remainder 
-;   R> 0< IF			if quotient negative, 
-;       NEGATE 
-;       OVER IF			if remainder nonzero, 
-;	R@ ROT - SWAP 1-	adjust rem,quot 
-;       THEN 
-;   THEN  R> DROP ; 
+;   DUP >R            divisor
+;   2DUP XOR >R  sign of quotient
+;   >R            divisor
+;   DABS R@ ABS UM/MOD
+;   SWAP R> ?NEGATE SWAP        apply sign to remainder
+;   R> 0< IF                    if quotient negative,
+;       NEGATE
+;       OVER IF                 if remainder nonzero,
+;       R@ ROT - SWAP 1-        adjust rem,quot
+;       THEN
+;   THEN  R> DROP ;
 
-		HEADER	6,"FM/MOD",NORMAL
-FM_SLASH_MOD:	jsr	DO_COLON
-		dw	DUP
-		dw	TO_R
-		dw	TWO_DUP
-		dw	XOR
-		dw	TO_R
-		dw	TO_R
-		dw	DABS
-		dw	R_FETCH
-		dw	ABS
-		dw	UM_SLASH_MOD
-		dw	SWAP
-		dw	R_FROM
-		dw	QUERY_NEGATE
-		dw	SWAP
-		dw	R_FROM
-		dw	ZERO_LESS
-		dw	QUERY_BRANCH,FM_SLASH_MOD_1
-		dw	NEGATE
-		dw	OVER
-		dw	QUERY_BRANCH,FM_SLASH_MOD_1
-		dw	R_FETCH
-		dw	ROT
-		dw	MINUS
-		dw	SWAP
-		dw	ONE_MINUS
-FM_SLASH_MOD_1:	dw	R_FROM
-		dw	DROP
-		dw	EXIT
-		
+                HEADER  6,"FM/MOD",NORMAL
+FM_SLASH_MOD:   jsr     DO_COLON
+                dw      DUP
+                dw      TO_R
+                dw      TWO_DUP
+                dw      XOR
+                dw      TO_R
+                dw      TO_R
+                dw      DABS
+                dw      R_FETCH
+                dw      ABS
+                dw      UM_SLASH_MOD
+                dw      SWAP
+                dw      R_FROM
+                dw      QUERY_NEGATE
+                dw      SWAP
+                dw      R_FROM
+                dw      ZERO_LESS
+                dw      QUERY_BRANCH,FM_SLASH_MOD_1
+                dw      NEGATE
+                dw      OVER
+                dw      QUERY_BRANCH,FM_SLASH_MOD_1
+                dw      R_FETCH
+                dw      ROT
+                dw      MINUS
+                dw      SWAP
+                dw      ONE_MINUS
+FM_SLASH_MOD_1: dw      R_FROM
+                dw      DROP
+                dw      EXIT
+
 ; MAX
 
                 HEADER  3,"MAX",NORMAL
@@ -1231,11 +1244,11 @@ UMIN_EXIT:      jmp     NIP
 
 ; ?DNEGATE
 
-QUERY_DNEGATE:	jsr	DO_COLON
-		dw	ZERO_LESS
-		dw	QUERY_BRANCH,QUERY_DNEG_1
-		dw	DNEGATE
-QUERY_DNEG_1:	dw	EXIT		
+QUERY_DNEGATE:  jsr     DO_COLON
+                dw      ZERO_LESS
+                dw      QUERY_BRANCH,QUERY_DNEG_1
+                dw      DNEGATE
+QUERY_DNEG_1:   dw      EXIT
 
 ; D+ ( d1|ud1 d2|ud2 -- d3|ud3 )
 ;
@@ -1281,34 +1294,34 @@ D_MINUS:
 
 ; D0<
 
-		HEADER	3,"D0<",NORMAL
+                HEADER  3,"D0<",NORMAL
 D_ZERO_LESS:
-		ldx	<1			; Fetch sign
-		tdc				; Drop a word
-		inc	a
-		inc	a
-		tcd
-		stz	<0			; Assume false
-		txa
-		bpl	D_ZERO_LESS_1
-		dec	<0
-D_ZERO_LESS_1:	CONTINUE
+                ldx     <1                      ; Fetch sign
+                tdc                             ; Drop a word
+                inc     a
+                inc     a
+                tcd
+                stz     <1                      ; Assume false
+                txa
+                bpl     D_ZERO_LESS_1
+                dec     <1
+D_ZERO_LESS_1:  CONTINUE
 
 ; D0=
 
-		HEADER	3,"D0=",NORMAL
+                HEADER  3,"D0=",NORMAL
 D_ZERO_EQUAL:
-		ldx	<1			; Fetch sign
-		tdc				; Drop a word
-		inc	a
-		inc	a
-		tcd
-		stz	<0			; Assume false
-		txa
-		bne	D_ZERO_EQUAL_1
-		dec	<0
-D_ZERO_EQUAL_1:	CONTINUE
-		
+                ldx     <1                      ; Fetch sign
+                tdc                             ; Drop a word
+                inc     a
+                inc     a
+                tcd
+                stz     <1                      ; Assume false
+                txa
+                bne     D_ZERO_EQUAL_1
+                dec     <1
+D_ZERO_EQUAL_1: CONTINUE
+
 ; D2* ( xd1 -- xd2 )
 ;
 ; xd2 is the result of shifting xd1 one bit toward the most-significant bit,
@@ -1335,53 +1348,53 @@ D_TWO_SLASH:
 
 ; D<
 
-		HEADER	2,"D<",NORMAL
-D_LESS:		jsr	DO_COLON
-		dw	D_MINUS
-		dw	D_ZERO_LESS
-		dw	EXIT
+                HEADER  2,"D<",NORMAL
+D_LESS:         jsr     DO_COLON
+                dw      D_MINUS
+                dw      D_ZERO_LESS
+                dw      EXIT
 
 ; D=
 
-		HEADER	2,"D=",NORMAL
-D_EQUAL:	jsr	DO_COLON
-		dw	D_MINUS
-		dw	D_ZERO_EQUAL
-		dw	EXIT
-		
+                HEADER  2,"D=",NORMAL
+D_EQUAL:        jsr     DO_COLON
+                dw      D_MINUS
+                dw      D_ZERO_EQUAL
+                dw      EXIT
+
 ; DABS
 
-		HEADER	4,"DABS",NORMAL
+                HEADER  4,"DABS",NORMAL
 DABS:
-		lda	<1
-		bpl	DABS_1
-		jmp	DNEGATE
-DABS_1:		CONTINUE
+                lda     <1
+                bpl     DABS_1
+                jmp     DNEGATE
+DABS_1:         CONTINUE
 
 ; DMAX
 
-		HEADER	4,"DMAX",NORMAL
-DMAX:		jsr	DO_COLON
-		dw	TWO_OVER
-		dw	TWO_OVER
-		dw	D_LESS
-		dw	QUERY_BRANCH,DMAX_1
-		dw	TWO_SWAP
-DMAX_1:		dw	TWO_DROP
-		dw	EXIT
+                HEADER  4,"DMAX",NORMAL
+DMAX:           jsr     DO_COLON
+                dw      TWO_OVER
+                dw      TWO_OVER
+                dw      D_LESS
+                dw      QUERY_BRANCH,DMAX_1
+                dw      TWO_SWAP
+DMAX_1:         dw      TWO_DROP
+                dw      EXIT
 
 ; DMIN
 
-		HEADER	4,"DMIN",NORMAL
-DMIN:		jsr	DO_COLON
-		dw	TWO_OVER
-		dw	TWO_OVER
-		dw	D_LESS
-		dw	INVERT
-		dw	QUERY_BRANCH,DMIN_1
-		dw	TWO_SWAP
-DMIN_1:		dw	TWO_DROP
-		dw	EXIT
+                HEADER  4,"DMIN",NORMAL
+DMIN:           jsr     DO_COLON
+                dw      TWO_OVER
+                dw      TWO_OVER
+                dw      D_LESS
+                dw      INVERT
+                dw      QUERY_BRANCH,DMIN_1
+                dw      TWO_SWAP
+DMIN_1:         dw      TWO_DROP
+                dw      EXIT
 
 ; DNEGATE ( d1 -- d2 )
 ;
@@ -1417,24 +1430,24 @@ D_TO_S:
 
 ; M*
 ;
-;   2DUP XOR >R	carries sign of the result
+;   2DUP XOR >R carries sign of the result
 ;   SWAP ABS SWAP ABS UM*
 ;   R> ?DNEGATE
 
-		HEADER	2,"M*",NORMAL
-M_STAR:		jsr	DO_COLON
-		dw	TWO_DUP
-		dw	XOR
-		dw	TO_R
-		dw	SWAP
-		dw	ABS
-		dw	SWAP
-		dw	ABS
-		dw	UM_STAR
-		dw	R_FROM
-		dw	QUERY_DNEGATE
-		dw	EXIT
-		
+                HEADER  2,"M*",NORMAL
+M_STAR:         jsr     DO_COLON
+                dw      TWO_DUP
+                dw      XOR
+                dw      TO_R
+                dw      SWAP
+                dw      ABS
+                dw      SWAP
+                dw      ABS
+                dw      UM_STAR
+                dw      R_FROM
+                dw      QUERY_DNEGATE
+                dw      EXIT
+
 ; M*/
 
 
@@ -1478,31 +1491,31 @@ S_TO_D_1        CONTINUE                        ; Done
 
 ; SM/REM
 ;
-;   2DUP XOR >R			sign of quotient
-;   OVER >R			sign of remainder
+;   2DUP XOR >R                 sign of quotient
+;   OVER >R                     sign of remainder
 ;   ABS >R DABS R> UM/MOD
 ;   SWAP R> ?NEGATE
 ;   SWAP R> ?NEGATE ;
 
-		HEADER	6,"SM/REM",NORMAL
-SM_SLASH_REM:	jsr	DO_COLON
-		dw	TWO_DUP
-		dw	XOR
-		dw	TO_R
-		dw	OVER
-		dw	TO_R
-		dw	ABS
-		dw	TO_R
-		dw	DABS
-		dw	R_FROM
-		dw	UM_SLASH_MOD
-		dw	SWAP
-		dw	R_FROM
-		dw	QUERY_NEGATE
-		dw	SWAP
-		dw	R_FROM
-		dw	QUERY_NEGATE
-		dw	EXIT
+                HEADER  6,"SM/REM",NORMAL
+SM_SLASH_REM:   jsr     DO_COLON
+                dw      TWO_DUP
+                dw      XOR
+                dw      TO_R
+                dw      OVER
+                dw      TO_R
+                dw      ABS
+                dw      TO_R
+                dw      DABS
+                dw      R_FROM
+                dw      UM_SLASH_MOD
+                dw      SWAP
+                dw      R_FROM
+                dw      QUERY_NEGATE
+                dw      SWAP
+                dw      R_FROM
+                dw      QUERY_NEGATE
+                dw      EXIT
 
 ; UD* ( ud1 d2 -- ud3)
 ;
@@ -1543,7 +1556,7 @@ UM_STAR_2:      ror     <1                      ; Rotate high word down
                 dex
                 bne     UM_STAR_1
                 pla
-                CONTINUE   			; Done
+                CONTINUE                        ; Done
 
 ; UM/MOD ( ud u1 -- u2 u3 )
 ;
@@ -1551,26 +1564,38 @@ UM_STAR_2:      ror     <1                      ; Rotate high word down
 ; arithmetic are unsigned. An ambiguous condition exists if u1 is zero or if the
 ; quotient lies outside the range of a single-cell unsigned integer.
 
-		HEADER	6,"UM/MOD",NORMAL
+                HEADER  6,"UM/MOD",NORMAL
 UM_SLASH_MOD:
-		ldx	#16
-UM_SLASH_MOD_1:	asl	<3
-		rol	<5
-		sec
-		lda	<5
-		sbc	<1
-		beq	UM_SLASH_MOD_2
-		bcc	UM_SLASH_MOD_3
-UM_SLASH_MOD_2:	sta	<5
-		inc	<3
-UM_SLASH_MOD_3:	dex
-		bne	UM_SLASH_MOD_1
-		tdc
-		inc	a
-		inc	a
-		tcd
-		CONTINUE
-		
+                sec                             ; Check for overflow
+                lda     <3
+                sbc     <1
+                bcs     UM_SLASH_MOD_3
+
+                ldx     #17
+UM_SLASH_MOD_1: rol     <5                      ; Rotate dividend lo
+                dex
+                beq     UM_SLASH_MOD_4
+                rol     <3
+                bcs     UM_SLASH_MOD_2          ; Carry set dividend > divisor
+
+                lda     <3                      ; Is dividend < divisor?
+                cmp     <1
+                bcc     UM_SLASH_MOD_1          ; Yes, shift in 0
+
+UM_SLASH_MOD_2: lda     <3                      ; Reduce dividend
+                sbc     <1
+                sta     <3
+                bra     UM_SLASH_MOD_1          ; Shift in 1
+
+UM_SLASH_MOD_3: lda     #$ffff                  ; Overflowed set results
+                sta     <3
+                sta     <5
+UM_SLASH_MOD_4: tdc                             ; Drop top word
+                inc     a
+                inc     a
+                tcd
+                jmp     SWAP                    ; Swap quotient and remainder
+
 ;===============================================================================
 ; Comparisons
 ;-------------------------------------------------------------------------------
@@ -1627,22 +1652,10 @@ ZERO_GT_EXIT:   CONTINUE                        ; Done
 ; <
 
                 HEADER  1,"<",NORMAL
-LESS:
-                ldx     <1                      ; Pull x2 from stack
-                tdc
-                inc     a
-                inc     a
-                tcd
-                txa
-                sec                             ; Compare with x1
-                sbc     <1
-                stz     <1                      ; Assume false result
-                bvs     LESS_1
-                bpl     LESS_2                  ; V == 0 && N == 0
-                bra     LESS_3
-LESS_1:         bpl     LESS_3                  ; V == 1 && N == 1
-LESS_2:         dec     <1
-LESS_3:         CONTINUE
+LESS:           jsr     DO_COLON
+                dw      SWAP
+                dw      GREATER
+                dw      EXIT
 
 ; <>
 
@@ -1679,10 +1692,22 @@ EQ_EXIT:        CONTINUE                        ; Done
 ; >
 
                 HEADER  1,">",NORMAL
-GREATER:        jsr     DO_COLON
-                dw      SWAP
-                dw      LESS
-                dw      EXIT
+GREATER:
+                ldx     <1                      ; Pull x2 from stack
+                tdc
+                inc     a
+                inc     a
+                tcd
+                txa
+                sec                             ; Compare with x1
+                sbc     <1
+                stz     <1                      ; Assume false result
+                bvc     GREATER_1
+                eor     #$8000
+GREATER_1:      bpl     GREATER_2               ; V == 1 && N == 1
+                dec     <1
+GREATER_2:      CONTINUE
+
 
 ; U<
 
@@ -1826,13 +1851,13 @@ XOR:
 ;
 ;   ROT IF TYPE ABORT THEN 2DROP ;
 
-QUERY_ABORT:	jsr	DO_COLON
-		dw	ROT
-		dw	QUERY_BRANCH,QUERY_ABORT_1
-		dw	TYPE
-		dw	ABORT
-QUERY_ABORT_1:	dw	TWO_DROP
-		dw	EXIT
+QUERY_ABORT:    jsr     DO_COLON
+                dw      ROT
+                dw      QUERY_BRANCH,QUERY_ABORT_1
+                dw      TYPE
+                dw      ABORT
+QUERY_ABORT_1:  dw      TWO_DROP
+                dw      EXIT
 
 ; ABORT ( i*x -- ) ( R: j*x -- )
 ;
@@ -2781,14 +2806,14 @@ DOT_PAREN:      jsr     DO_COLON
 
 ; ." ( -- )
 
-		LINK 	IMMEDIATE
-		db	2,".",'"'
-DOT_QUOTE:	jsr	DO_COLON
-		dw	S_QUOTE
-		dw	DO_LITERAL,TYPE
-		dw	COMMA
-		dw	EXIT
-		
+                LINK    IMMEDIATE
+                db      2,".",'"'
+DOT_QUOTE:      jsr     DO_COLON
+                dw      S_QUOTE
+                dw      DO_LITERAL,TYPE
+                dw      COMMA
+                dw      EXIT
+
 
 ; +LOOP ( -- )
 
@@ -2869,54 +2894,54 @@ TWO_CONSTANT:   jsr     DO_COLON
                 dw      DO_LITERAL,DO_TWO_CONSTANT
                 dw      BUILD
                 dw      COMMA
-		dw	COMMA
+                dw      COMMA
                 dw      EXIT; AGAIN ( -- )
 
 DO_TWO_CONSTANT:
-                plx				; Get return address
-                tdc				; Create space on stack
+                plx                             ; Get return address
+                tdc                             ; Create space on stack
                 dec     a
                 dec     a
-		dec	a
-		dec	a
+                dec     a
+                dec     a
                 tcd
-                lda     !1,x			; Transfer the value
+                lda     !1,x                    ; Transfer the value
                 sta     <1
-		lda	!3,x
-		sta	<3
-                CONTINUE                        ; Done		
+                lda     !3,x
+                sta     <3
+                CONTINUE                        ; Done
 
 ; 2LITERAL
 
-		HEADER	8,"2LITERAL",IMMEDIATE
-TWO_LITERAL:	jsr	DO_COLON
-		dw	DO_LITERAL,DO_TWO_LITERAL
-		dw	COMMA
-		dw	COMMA
-		dw	COMMA
-		dw	EXIT
-		
+                HEADER  8,"2LITERAL",IMMEDIATE
+TWO_LITERAL:    jsr     DO_COLON
+                dw      DO_LITERAL,DO_TWO_LITERAL
+                dw      COMMA
+                dw      COMMA
+                dw      COMMA
+                dw      EXIT
+
 DO_TWO_LITERAL:
-                tdc				; Make room on stack
+                tdc                             ; Make room on stack
                 dec     a
                 dec     a
-		dec	a
-		dec	a
+                dec     a
+                dec     a
                 tcd
                 lda     !0,y                    ; Fetch constant from IP
                 sta     <1
-		lda	!2,y
-		sta	<3
-                iny				; Bump IP
+                lda     !2,y
+                sta     <3
+                iny                             ; Bump IP
                 iny
-		iny
-		iny
-                CONTINUE                        ; Done		
+                iny
+                iny
+                CONTINUE                        ; Done
 
 ; 2VARIABLE
 
-		HEADER	9,"2VARIABLE",IMMEDIATE
-TWO_VARIABLE:	jsr	DO_COLON
+                HEADER  9,"2VARIABLE",IMMEDIATE
+TWO_VARIABLE:   jsr     DO_COLON
                 dw      CREATE
                 dw      DO_LITERAL,DO_VARIABLE
                 dw      BUILD
@@ -2927,14 +2952,14 @@ TWO_VARIABLE:	jsr	DO_COLON
 
 ; ABORT" ( -- )
 
-		LINK	IMMEDIATE
-		db	6,"ABORT",'"'
-ABORT_QUOTE:	jsr	DO_COLON
-		dw	S_QUOTE
-		dw	DO_LITERAL,QUERY_ABORT
-		dw	COMMA
-		dw	EXIT
-		
+                LINK    IMMEDIATE
+                db      6,"ABORT",'"'
+ABORT_QUOTE:    jsr     DO_COLON
+                dw      S_QUOTE
+                dw      DO_LITERAL,QUERY_ABORT
+                dw      COMMA
+                dw      EXIT
+
 ; AGAIN ( -- )
                 HEADER  5,"AGAIN",IMMEDIATE
 AGAIN:          jsr     DO_COLON
@@ -2964,12 +2989,12 @@ CONSTANT:       jsr     DO_COLON
                 dw      EXIT
 
 DO_CONSTANT:
-                plx				; Get return address
-                tdc				; Create space on stack
+                plx                             ; Get return address
+                tdc                             ; Create space on stack
                 dec     a
                 dec     a
                 tcd
-                lda     !1,x			; Transfer the value
+                lda     !1,x                    ; Transfer the value
                 sta     <1
                 CONTINUE                        ; Done
 
@@ -3024,7 +3049,7 @@ IF:             jsr     DO_COLON
                 dw      ZERO
                 dw      COMMA
                 dw      EXIT
-		
+
 QUERY_BRANCH:
                 ldx     <1                      ; Pull the top of stack value
                 tdc
@@ -3039,15 +3064,15 @@ QUERY_BRANCH:
 
 ; IMMEDIATE ( -- )
 
-		HEADER	9,"IMMEDIATE",IMMEDIATE
-		jsr	DO_COLON
-		dw	DO_LITERAL,IMMEDIATE
-		dw	LATEST
-		dw	FETCH
-		dw	ONE_MINUS
-		dw	C_STORE
-		dw	EXIT
-		
+                HEADER  9,"IMMEDIATE",IMMEDIATE
+                jsr     DO_COLON
+                dw      DO_LITERAL,IMMEDIATE
+                dw      LATEST
+                dw      FETCH
+                dw      ONE_MINUS
+                dw      C_STORE
+                dw      EXIT
+
 ; LITERAL ( x -- )
 ;
 ; Append the run-time semantics given below to the current definition.
@@ -3060,7 +3085,7 @@ LITERAL:        jsr     DO_COLON
                 dw      EXIT
 
 DO_LITERAL:
-                tdc				; Make room on stack
+                tdc                             ; Make room on stack
                 dec     a
                 dec     a
                 tcd
@@ -3102,32 +3127,32 @@ DO_LOOP_END:    iny                             ; Skip over address
 
 ;   BL WORD FIND
 ;   DUP 0= ABORT" ?"
-;   0< IF   -- xt	non immed: add code to current
-;			def'n to compile xt later.
-;       ['] LIT ,XT  ,	add "LIT,xt,COMMAXT"
-;       ['] ,XT ,XT	to current definition
+;   0< IF   -- xt       non immed: add code to current
+;                       def'n to compile xt later.
+;       ['] LIT ,XT  ,  add "LIT,xt,COMMAXT"
+;       ['] ,XT ,XT     to current definition
 ;   ELSE  ,XT      immed: compile into cur. def'n
 ;   THEN ; IMMEDIATE
 
-		HEADER	8,"POSTPONE",IMMEDIATE
-POSTPONE:	jsr	DO_COLON
-		dw	BL
-		dw	WORD
-		dw	FIND
-		dw	DUP
-		dw	ZERO_EQUAL
-		dw	DO_S_QUOTE
-		db	1,"?"
-		dw	QUERY_ABORT
-		dw	ZERO_LESS
-		dw	QUERY_BRANCH,POSTPONE_1
-		dw	DO_LITERAL,DO_LITERAL
-		dw	COMMA
-		dw	COMMA
-		dw	BRANCH,POSTPONE_2
-POSTPONE_1:	dw	COMMA
-POSTPONE_2:	dw	EXIT
-		
+                HEADER  8,"POSTPONE",IMMEDIATE
+POSTPONE:       jsr     DO_COLON
+                dw      BL
+                dw      WORD
+                dw      FIND
+                dw      DUP
+                dw      ZERO_EQUAL
+                dw      DO_S_QUOTE
+                db      1,"?"
+                dw      QUERY_ABORT
+                dw      ZERO_LESS
+                dw      QUERY_BRANCH,POSTPONE_1
+                dw      DO_LITERAL,DO_LITERAL
+                dw      COMMA
+                dw      COMMA
+                dw      BRANCH,POSTPONE_2
+POSTPONE_1:     dw      COMMA
+POSTPONE_2:     dw      EXIT
+
 ; RECURSE ( -- )
 
                 HEADER  7,"RECURSE",IMMEDIATE
@@ -3143,27 +3168,27 @@ RECURSE:        jsr     DO_COLON
                 LINK    IMMEDIATE
                 db      2,"S",'"'
 S_QUOTE:        jsr     DO_COLON
-		dw	DO_LITERAL,DO_S_QUOTE
-		dw	COMMA
-		dw	DO_LITERAL,'"'
-		dw	WORD
-		dw	C_FETCH
-		dw	ONE_PLUS
-		dw	ALIGNED
-		dw	ALLOT
+                dw      DO_LITERAL,DO_S_QUOTE
+                dw      COMMA
+                dw      DO_LITERAL,'"'
+                dw      WORD
+                dw      C_FETCH
+                dw      ONE_PLUS
+                dw      ALIGNED
+                dw      ALLOT
                 dw      EXIT
 
 ; (S") ( -- c-addr u )
 
 DO_S_QUOTE:
-		jsr	DO_COLON
-		dw	R_FROM
-		dw	COUNT
-		dw	TWO_DUP
-		dw	PLUS
-		dw	ALIGNED
-		dw	TO_R
-		dw	EXIT
+                jsr     DO_COLON
+                dw      R_FROM
+                dw      COUNT
+                dw      TWO_DUP
+                dw      PLUS
+                dw      ALIGNED
+                dw      TO_R
+                dw      EXIT
 
 ; THEN ( -- )
 
@@ -3419,18 +3444,178 @@ TYPE_2          dw      DROP
 TYPE_3          dw      EXIT
 
 ;===============================================================================
+; Formatted Output
 ;-------------------------------------------------------------------------------
 
-; #
-; #>
-; #S
-; SIGN
+; # ( ud1 -- ud2 )
+;
+; Divide ud1 by the number in BASE giving the quotient ud2 and the remainder n.
+; (n is the least-significant digit of ud1.) Convert n to external form and add
+; the resulting character to the beginning of the pictured numeric output string.
+; An ambiguous condition exists if # executes outside of a <# #> delimited
+; number conversion.
+;
+;       BASE @ >R 0 R@ UM/MOD ROT ROT R> UM/MOD ROT ROT DUP 9 > 7 AND + 30 + HOLD
+
+                HEADER  1,"#",NORMAL
+HASH:           jsr     DO_COLON
+                dw      BASE
+                dw      FETCH
+                dw      TO_R
+                dw      ZERO
+                dw      R_FETCH
+                dw      UM_SLASH_MOD
+                dw      ROT
+                dw      ROT
+                dw      R_FROM
+                dw      UM_SLASH_MOD
+                dw      ROT
+                dw      ROT
+                dw      DUP
+                dw      DO_LITERAL,9
+                dw      GREATER
+                dw      DO_LITERAL,7
+                dw      AND
+                dw      PLUS
+                dw      DO_LITERAL,'0'
+                dw      PLUS
+                dw      HOLD
+                dw      EXIT
+
+; #> ( xd -- c-addr u )
+;
+; Drop xd. Make the pictured numeric output string available as a character
+; string. c-addr and u specify the resulting character string. A program may
+; replace characters within the string.
+;
+;       2DROP HP @ PAD OVER -
+
+                HEADER  2,"#>",NORMAL
+HASH_GREATER:   jsr     DO_COLON
+                dw      TWO_DROP
+                dw      HP
+                dw      FETCH
+                dw      PAD
+                dw      OVER
+                dw      MINUS
+                dw      EXIT
+
+; #S ( ud1 -- ud2 )
+;
+; Convert one digit of ud1 according to the rule for #. Continue conversion
+; until the quotient is zero. ud2 is zero. An ambiguous condition exists if #S
+; executes outside of a <# #> delimited number conversion.
+;
+;       BEGIN # 2DUP OR 0= UNTIL
+
+                HEADER  2,"#S",NORMAL
+HASH_S:         jsr     DO_COLON
+HASH_S_1:       dw      HASH
+                dw      TWO_DUP
+                dw      OR
+                dw      ZERO_EQUAL
+                dw      QUERY_BRANCH,HASH_S_1
+                dw      EXIT
+
+; . ( n -- )
+;
+; Display n in free field format.
+;
+;       <# DUP ABS 0 #S ROT SIGN #> TYPE SPACE
+
+                HEADER  1,".",NORMAL
+DOT:            jsr     DO_COLON
+                dw      LESS_HASH
+                dw      DUP
+                dw      ABS
+                dw      ZERO
+                dw      HASH_S
+                dw      ROT
+                dw      SIGN
+                dw      HASH_GREATER
+                dw      TYPE
+                dw      SPACE
+                dw      EXIT
+
+; <# ( -- )
+;
+; Initialize the pictured numeric output conversion process.
+;
+;       PAD HP !
+
+                HEADER  2,"<#",NORMAL
+LESS_HASH:      jsr     DO_COLON
+                dw      PAD
+                dw      HP
+                dw      STORE
+                dw      EXIT
+
+; HOLD ( char -- )
+
+; Add char to the beginning of the pictured numeric output string. An
+; ambiguous condition exists if HOLD executes outside of a <# #> delimited
+; number conversion.
+;
+;       -1 HP +!  HP @ C!
+
+                HEADER  4,"HOLD",NORMAL
+HOLD:           jsr     DO_COLON
+                dw      DO_LITERAL,-1
+                dw      HP
+                dw      PLUS_STORE
+                dw      HP
+                dw      FETCH
+                dw      C_STORE
+                dw      EXIT
+
+; PAD ( -- c-addr )
+;
+; c-addr is the address of a transient region that can be used to hold data
+; for intermediate processing.
+
+                HEADER  3,"PAD",NORMAL
+PAD:            jsr     DO_CONSTANT
+                dw      PAD_AREA
+
+; SIGN ( n -- )
+;
+; If n is negative, add a minus sign to the beginning of the pictured numeric
+; output string. An ambiguous condition exists if SIGN executes outside of a
+; <# #> delimited number conversion.
+;
+;       [ HEX ] 0< IF 2D HOLD THEN
+
+                HEADER  4,"SIGN",NORMAL
+SIGN:           jsr     DO_COLON
+                dw      ZERO_LESS
+                dw      QUERY_BRANCH,SIGN_1
+                dw      DO_LITERAL,'-'
+                dw      HOLD
+SIGN_1:         dw      EXIT
+
+; U. ( u -- )
+;
+; Display u in free field format.
+;
+;  <# 0 #S #> TYPE SPACE
+
+                HEADER  2,"U.",NORMAL
+U_DOT:          jsr     DO_COLON
+                dw      LESS_HASH
+                dw      ZERO
+                dw      HASH_S
+                dw      HASH_GREATER
+                dw      TYPE
+                dw      SPACE
+                dw      EXIT
 
 ;===============================================================================
 ; Programming Tools
 ;-------------------------------------------------------------------------------
 
-; .NYBBLE
+; .NYBBLE ( n -- )
+;
+; Print the least significant nybble of the top value on the stack in hex.
 
 ;               HEADER  7,".NYBBLE",NORMAL
 DOT_NYBBLE:
@@ -3443,7 +3628,10 @@ DOT_NYBBLE:
                 jsr     UartTx
                 jmp     DROP
 
-; .BYTE
+; .BYTE ( n -- )
+;
+; Print least significant byte of top value on the stack in hex followed by
+; a space.
 
                 HEADER  5,".BYTE",NORMAL
 DOT_BYTE:       jsr     DO_COLON
@@ -3455,7 +3643,9 @@ DOT_BYTE:       jsr     DO_COLON
                 dw      SPACE
                 dw      EXIT
 
-; .WORD
+; .WORD ( n -- )
+;
+; Print the top value on the stack in hex followed by a space.
 
                 HEADER  5,".WORD",NORMAL
 DOT_WORD:       jsr     DO_COLON
@@ -3490,6 +3680,9 @@ DOT_WORD:       jsr     DO_COLON
                 dw      EXIT
 
 ; .S ( -- )
+;
+; Copy and display the values currently on the data stack. The format of the
+; display is implementation-dependent.
 
                 HEADER  2,".S",NORMAL
                 jsr     DO_COLON
@@ -3507,6 +3700,8 @@ DOT_S_1:        dw      I
                 dw      EXIT
 
 ; ? ( a-addr -- )
+;
+; Display the value stored at a-addr.
 
                 HEADER  1,"?",NORMAL
                 jsr     DO_COLON
