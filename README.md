@@ -1,4 +1,4 @@
-# w65c816-forth
+# W65C816SXB ANS Forth
 
 This project builds a Forth environment for a WDC W65C816SXB which can be
 accessed via a USB serial connection to the ACIA port. (I use a cheap PL2303
@@ -6,8 +6,8 @@ module with jumper wires acquired from ebay).
 
 The code is split into two modules namely:
 
-- The sxb65c02sxb.asm file is a general purpose vector handler and UART
-  interrupt handler (to get around hardware problems in the W65C51 ACIA chip).
+- The w65c816sxb.asm file is a general purpose vector handler and UART
+  handler (to get around hardware problems in the W65C51 ACIA chip).
 
 - The ans-forth.asm file is implements the forth environment. This file includes
   device.asm to implement hardware specific words.

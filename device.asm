@@ -27,7 +27,7 @@
 ;               HEADER  7,"(TITLE)",NORMAL
 DO_TITLE:       jsr     DO_COLON
                 dw      DO_S_QUOTE
-                db      28,"W65C816SXB ANS-Forth [16.04]"
+                db      28,"W65C816SXB ANS-Forth [16.05]"
                 dw      EXIT
 
 ; BYE ( -- )

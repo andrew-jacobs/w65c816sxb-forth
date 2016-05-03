@@ -164,12 +164,10 @@ COLD:
                 dw      FALSE
                 dw      STATE
                 dw      STORE
-                dw      DO_LITERAL
-                dw      NEXT_WORD
+                dw      DO_LITERAL,NEXT_WORD
                 dw      DP
                 dw      STORE
-                dw      DO_LITERAL
-                dw      LAST_WORD
+                dw      DO_LITERAL,LAST_WORD
                 dw      LATEST
                 dw      STORE
                 dw      CR
@@ -225,7 +223,6 @@ BLK:            jsr     DO_USER
 
 ; (BUFFER)
 
-;               HEADER  8,"(BUFFER)",NORMAL
 BUFFER:         jsr     DO_USER
                 dw      BUFFER_OFFSET
 
@@ -252,7 +249,6 @@ LATEST:         jsr     DO_USER
 
 ; (LENGTH)
 
-;               HEADER  8,"(LENGTH)",NORMAL
 LENGTH:         jsr     DO_USER
                 dw      LENGTH_OFFSET
 
@@ -267,7 +263,6 @@ SCR:            jsr     DO_USER
 
 ; (SOURCE-ID)
 
-;               HEADER  11,"(SOURCE-ID)",NORMAL
 SOURCEID:       jsr     DO_USER
                 dw      SOURCEID_OFFSET
 
@@ -418,6 +413,8 @@ PLUS_STORE:
 ; finishes execution. An ambiguous condition exists if the data-space pointer
 ; is not aligned prior to execution of ,.
 ;
+; In this implementation is its defined as:
+;
 ;   HERE ! 1 CELLS ALLOT
 
                 LINK    NORMAL
@@ -433,7 +430,11 @@ COMMA:          jsr     DO_COLON
 ; 2! ( x1 x2 a-addr -- )
 ;
 ; Store the cell pair x1 x2 at a-addr, with x2 at a-addr and x1 at the next
-; consecutive cell. It is equivalent to the sequence SWAP OVER ! CELL+ !.
+; consecutive cell.
+;
+; In this implementation is its defined as:
+;
+;   SWAP OVER ! CELL+ !.
 
                 HEADER  2,"2!",NORMAL
 TWO_STORE:      jsr     DO_COLON
@@ -447,8 +448,11 @@ TWO_STORE:      jsr     DO_COLON
 ; 2@ ( a-addr -- x1 x2 )
 ;
 ; Fetch the cell pair x1 x2 stored at a-addr. x2 is stored at a-addr and x1 at
-; the next consecutive cell. It is equivalent to the sequence DUP CELL+ @ SWAP
-; @.
+; the next consecutive cell.
+;
+; In this implementation is its defined as:
+;
+;   DUP CELL+ @ SWAP @
 
                 HEADER  2,"2@",NORMAL
 TWO_FETCH:      jsr     DO_COLON
@@ -722,7 +726,10 @@ QUERY_DUP:
                 bne     DUP                     ; Non-zero value?
                 CONTINUE                        ; Done
 
-; DEPTH ( -- n )
+; DEPTH ( -- +n )
+;
+; +n is the number of single-cell values contained in the data stack before +n
+; was placed on the stack.
 
                 HEADER  5,"DEPTH",NORMAL
 DEPTH:          jsr     DO_COLON
@@ -802,11 +809,21 @@ PICK:
 ; Remove u. Rotate u+1 items on the top of the stack. An ambiguous condition
 ; exists if there are less than u+2 items on the stack before ROLL is executed.
 
-; TODO
-
                 HEADER  4,"ROLL",NORMAL
 ROLL:
-                CONTINUE
+                asl     <1                      ; Convert count to index
+                ldx     <1
+                beq     ROLL_2                  ; Zero? Nothing to do
+                lda     <3,x                    ; Save the final value
+                pha
+ROLL_1:         lda     <1,x                    ; Move x-1 to x
+                sta     <3,x
+                dex                             ; And repeat
+                dex
+                bne     ROLL_1
+                pla                             ; Recover the new top value
+                sta     <3
+ROLL_2:         jmp     DROP                    ; Drop the count
 
 ; ROT ( x1 x2 x3 -- x2 x3 x1 )
 ;
@@ -986,7 +1003,9 @@ R_FETCH:
 ;
 ; Multiply n1|u1 by n2|u2 giving the product n3|u3.
 ;
-;       M* DROP
+; In this implementation it is defined as:
+;
+;   M* DROP
 
                 HEADER  1,"*",NORMAL
 STAR:           jsr     DO_COLON
@@ -994,19 +1013,41 @@ STAR:           jsr     DO_COLON
                 dw      DROP
                 dw      EXIT
 
-; */
+; */ ( n1 n2 n3 -- n4 )
 ;
-;       */MOD NIP
+; Multiply n1 by n2 producing the intermediate double-cell result d. Divide d
+; by n3 giving the single-cell quotient n4. An ambiguous condition exists if
+; n3 is zero or if the quotient n4 lies outside the range of a signed number.
+; If d and n3 differ in sign, the implementation-defined result returned will
+; be the same as that returned by either the phrase >R M* R> FM/MOD SWAP DROP
+; or the phrase >R M* R> SM/REM SWAP DROP.
+;
+; In this implementation it is defined as:
+;
+;   >R M* R> FM/MOD SWAP DROP
 
                 HEADER  2,"*/",NORMAL
 STAR_SLASH:     jsr     DO_COLON
-                dw      STAR_SLASH_MOD
-                dw      NIP
+                dw      TO_R
+                dw      M_STAR
+                dw      R_FROM
+                dw      FM_SLASH_MOD
+                dw      SWAP
+                dw      DROP
                 dw      EXIT
 
-; */MOD
+; */MOD ( n1 n2 n3 -- n4 n5 )
 ;
-;       >R M* R> FM/MOD
+; Multiply n1 by n2 producing the intermediate double-cell result d. Divide d
+; by n3 producing the single-cell remainder n4 and the single-cell quotient n5.
+; An ambiguous condition exists if n3 is zero, or if the quotient n5 lies
+; outside the range of a single-cell signed integer. If d and n3 differ in
+; sign, the implementation-defined result returned will be the same as that
+; returned by either the phrase >R M* R> FM/MOD or the phrase >R M* R> SM/REM.
+;
+; In this implementation it is defined as:
+;
+;   >R M* R> FM/MOD
 
                 HEADER  5,"*/MOD",NORMAL
 STAR_SLASH_MOD: jsr     DO_COLON
@@ -1048,19 +1089,37 @@ MINUS:
                 tcd
                 CONTINUE                        ; Done
 
-; /
+; / ( n1 n2 -- n3 )
 ;
-;       /MOD NIP
+; Divide n1 by n2, giving the single-cell quotient n3. An ambiguous condition
+; exists if n2 is zero. If n1 and n2 differ in sign, the implementation-defined
+; result returned will be the same as that returned by either the phrase >R S>D
+; R> FM/MOD SWAP DROP or the phrase >R S>D R> SM/REM SWAP DROP.
+;
+; In this implementatio it is defined as:
+;
+;   >R S>D R> FM/MOD SWAP DROP
 
                 HEADER  1,"/",NORMAL
 SLASH:          jsr     DO_COLON
-                dw      SLASH_MOD
-                dw      NIP
+                dw      TO_R
+                dw      S_TO_D
+                dw      R_FROM
+                dw      FM_SLASH_MOD
+                dw      SWAP
+                dw      DROP
                 dw      EXIT
 
-; /MOD
+; /MOD ( n1 n2 -- n3 n4 )
 ;
-;       >R S>D R> FM/MOD
+; Divide n1 by n2, giving the single-cell remainder n3 and the single-cell
+; quotient n4. An ambiguous condition exists if n2 is zero. If n1 and n2 differ
+; in sign, the implementation-defined result returned will be the same as that
+; returned by either the phrase >R S>D R> FM/MOD or the phrase >R S>D R> SM/REM.
+;
+; In this implementation it is defined as:
+;
+;   >R S>D R> FM/MOD
 
                 HEADER  4,"/MOD",NORMAL
 SLASH_MOD:      jsr     DO_COLON
@@ -1110,9 +1169,13 @@ TWO_SLASH:
                 ror     <1                      ; And shift back into value
                 CONTINUE
 
-; ?NEGATE
+; ?NEGATE ( x sign -- x/-x)
 ;
-;       0< IF NEGATE THEN
+; If the sign value is negative then negate the value of x to match.
+;
+; In this implementation it is defined as:
+;
+;   0< IF NEGATE THEN
 
 QUERY_NEGATE:   jsr     DO_COLON
                 dw      ZERO_LESS
@@ -1131,11 +1194,18 @@ ABS:
                 jmp     NEGATE
 ABS_1:          CONTINUE                        ; Done
 
-; FM/MOD
+; FM/MOD ( n1 n2 -- n3 n4 )
 ;
-;   DUP >R            divisor
-;   2DUP XOR >R  sign of quotient
-;   >R            divisor
+; Divide n1 by n2, giving the single-cell remainder n3 and the single-cell
+; quotient n4. An ambiguous condition exists if n2 is zero. If n1 and n2 differ
+; in sign, the implementation-defined result returned will be the same as that
+; returned by either the phrase >R S>D R> FM/MOD or the phrase >R S>D R> SM/REM.
+;
+; In this implementation it is defined as:
+;
+;   DUP >R                      divisor
+;   2DUP XOR >R                 sign of quotient
+;   >R                          divisor
 ;   DABS R@ ABS UM/MOD
 ;   SWAP R> ?NEGATE SWAP        apply sign to remainder
 ;   R> 0< IF                    if quotient negative,
@@ -1176,7 +1246,9 @@ FM_SLASH_MOD_1: dw      R_FROM
                 dw      DROP
                 dw      EXIT
 
-; MAX
+; MAX ( n1 n2 -- n3 )
+;
+; n3 is the greater of n1 and n2.
 
                 HEADER  3,"MAX",NORMAL
 MAX:            jsr     DO_COLON
@@ -1187,7 +1259,9 @@ MAX:            jsr     DO_COLON
 MAX_1:          dw      DROP
                 dw      EXIT
 
-; MIN
+; MIN ( n1 n2 -- n3 )
+;
+; n3 is the lesser of n1 and n2.
 
                 HEADER  3,"MIN",NORMAL
 MIN:            jsr     DO_COLON
@@ -1198,11 +1272,23 @@ MIN:            jsr     DO_COLON
 MIN_1:          dw      DROP
                 dw      EXIT
 
-; MOD
+; MOD ( n1 n2 -- n3 )
+;
+; Divide n1 by n2, giving the single-cell remainder n3. An ambiguous condition
+; exists if n2 is zero. If n1 and n2 differ in sign, the implementation-defined
+; result returned will be the same as that returned by either the phrase >R S>D
+; R> FM/MOD DROP or the phrase >R S>D R> SM/REM DROP.
+;
+; In this implementation it is defined as:
+;
+;   >R S>D R> FM/MOD DROP
 
                 HEADER  3,"MOD",NORMAL
 MOD:            jsr     DO_COLON
-                dw      SLASH_MOD
+                dw      TO_R
+                dw      S_TO_D
+                dw      R_FROM
+                dw      FM_SLASH_MOD
                 dw      DROP
                 dw      EXIT
 
@@ -1218,7 +1304,9 @@ NEGATE:
                 sta     <1
                 CONTINUE                        ; Done
 
-; UMAX ( x1 x2 -- x1|x2 )
+; UMAX ( x1 x2 -- x3 )
+;
+; x3 is the greater of x1 and x2.
 
                 HEADER  4,"UMAX",NORMAL
 UMAX:
@@ -1228,7 +1316,9 @@ UMAX:
                 jmp     DROP                    ; No, x1 is
 UMAX_EXIT:      jmp     NIP
 
-; UMIN ( x1 x2 -- x1|x2 )
+; UMIN ( x1 x2 -- x3 )
+;
+; x3 is the lesser of x1 and x2.
 
                 HEADER  4,"UMIN",NORMAL
 UMIN:
@@ -1242,7 +1332,9 @@ UMIN_EXIT:      jmp     NIP
 ; Double Precision Arithmetic
 ;-------------------------------------------------------------------------------
 
-; ?DNEGATE
+; ?DNEGATE ( d1 sign -- d1/-d1 )
+;
+; If sign is less than zero than negate d1 otherwise leave it unchanged.
 
 QUERY_DNEGATE:  jsr     DO_COLON
                 dw      ZERO_LESS
@@ -1292,7 +1384,9 @@ D_MINUS:
                 tcd
                 CONTINUE                        ; Done
 
-; D0<
+; D0< ( d -- flag )
+;
+; flag is true if and only if d is less than zero.
 
                 HEADER  3,"D0<",NORMAL
 D_ZERO_LESS:
@@ -1307,7 +1401,9 @@ D_ZERO_LESS:
                 dec     <1
 D_ZERO_LESS_1:  CONTINUE
 
-; D0=
+; D0= ( d -- flag )
+;
+; flag is true if and only if d is equal to zero.
 
                 HEADER  3,"D0=",NORMAL
 D_ZERO_EQUAL:
@@ -1346,7 +1442,9 @@ D_TWO_SLASH:
                 ror     <3
                 CONTINUE
 
-; D<
+; D< ( d1 d2 -- flag )
+;
+; flag is true if and only if d1 is less than d2.
 
                 HEADER  2,"D<",NORMAL
 D_LESS:         jsr     DO_COLON
@@ -1354,7 +1452,9 @@ D_LESS:         jsr     DO_COLON
                 dw      D_ZERO_LESS
                 dw      EXIT
 
-; D=
+; D= ( d1 d2 -- flag )
+;
+; flag is true if and only if d1 is bit-for-bit the same as d2.
 
                 HEADER  2,"D=",NORMAL
 D_EQUAL:        jsr     DO_COLON
@@ -1362,7 +1462,9 @@ D_EQUAL:        jsr     DO_COLON
                 dw      D_ZERO_EQUAL
                 dw      EXIT
 
-; DABS
+; DABS ( d -- ud )
+;
+; ud is the absolute value of d.
 
                 HEADER  4,"DABS",NORMAL
 DABS:
@@ -1371,7 +1473,9 @@ DABS:
                 jmp     DNEGATE
 DABS_1:         CONTINUE
 
-; DMAX
+; DMAX ( d1 d2 -- d3 )
+;
+; d3 is the greater of d1 and d2.
 
                 HEADER  4,"DMAX",NORMAL
 DMAX:           jsr     DO_COLON
@@ -1383,7 +1487,9 @@ DMAX:           jsr     DO_COLON
 DMAX_1:         dw      TWO_DROP
                 dw      EXIT
 
-; DMIN
+; DMIN ( d1 d2 -- d3 )
+;
+; d3 is the lesser of d1 and d2.
 
                 HEADER  4,"DMIN",NORMAL
 DMIN:           jsr     DO_COLON
@@ -1428,9 +1534,13 @@ D_TO_S:
                 tcd
                 CONTINUE
 
-; M*
+; M* ( n1 n2 -- d )
 ;
-;   2DUP XOR >R carries sign of the result
+; d is the signed product of n1 times n2.
+;
+; In this implementation it is defined as:
+;
+;   2DUP XOR >R                 carries sign of the result
 ;   SWAP ABS SWAP ABS UM*
 ;   R> ?DNEGATE
 
@@ -1448,9 +1558,12 @@ M_STAR:         jsr     DO_COLON
                 dw      QUERY_DNEGATE
                 dw      EXIT
 
-; M*/
-
-
+; M*/ ( d1 n1 +n2 -- d2 )
+;
+; Multiply d1 by n1 producing the triple-cell intermediate result t. Divide t
+; by +n2 giving the double-cell quotient d2. An ambiguous condition exists if
+; +n2 is zero or negative, or the quotient lies outside of the range of a
+; double-precision signed integer.
 
 
 
@@ -1489,7 +1602,14 @@ S_TO_D:
                 dec     <1                      ; Make top -1 if negative
 S_TO_D_1        CONTINUE                        ; Done
 
-; SM/REM
+; SM/REM ( d1 n1 -- n2 n3 )
+;
+; Divide d1 by n1, giving the symmetric quotient n3 and the remainder n2.
+; Input and output stack arguments are signed. An ambiguous condition exists if
+; n1 is zero or if the quotient lies outside the range of a single-cell signed
+; integer.
+;
+; In this implementation it is defined as:
 ;
 ;   2DUP XOR >R                 sign of quotient
 ;   OVER >R                     sign of remainder
@@ -1536,7 +1656,10 @@ UD_STAR:        jsr     DO_COLON
                 dw      PLUS
                 dw      EXIT
 
-; UM* ( n1 n2 -- d )
+; UM* ( u1 u2 -- ud )
+;
+; Multiply u1 by u2, giving the unsigned double-cell product ud. All values and
+; arithmetic are unsigned.
 
                 HEADER  3,"UM*",NORMAL
 UM_STAR:
@@ -1649,7 +1772,9 @@ ZERO_GREATER:
                 dec     <1                      ; Yes, make true result
 ZERO_GT_EXIT:   CONTINUE                        ; Done
 
-; <
+; < ( n1 n2 -- flag )
+;
+; flag is true if and only if n1 is less than n2.
 
                 HEADER  1,"<",NORMAL
 LESS:           jsr     DO_COLON
@@ -1657,7 +1782,9 @@ LESS:           jsr     DO_COLON
                 dw      GREATER
                 dw      EXIT
 
-; <>
+; <> ( x1 x2 -- flag )
+;
+; flag is true if and only if x1 is not bit-for-bit the same as x2.
 
                 HEADER  2,"<>",NORMAL
 NOT_EQUAL:
@@ -1689,7 +1816,9 @@ EQUAL:
                 dec     <1                      ; Make result true
 EQ_EXIT:        CONTINUE                        ; Done
 
-; >
+; > ( n1 n2 -- flag )
+;
+; flag is true if and only if n1 is greater than n2.
 
                 HEADER  1,">",NORMAL
 GREATER:
@@ -1708,8 +1837,9 @@ GREATER_1:      bpl     GREATER_2               ; V == 1 && N == 1
                 dec     <1
 GREATER_2:      CONTINUE
 
-
-; U<
+; U< ( u1 u2 -- flag )
+;
+; flag is true if and only if u1 is less than u2.
 
                 HEADER  2,"U<",NORMAL
 U_LESS:
@@ -1725,7 +1855,9 @@ U_LESS:
                 dec     <1
 U_LESS_1:       CONTINUE
 
-; U>
+; U> ( u1 u2 -- flag )
+;
+; flag is true if and only if u1 is greater than u2.
 
                 HEADER  2,"U>",NORMAL
 U_GREATER:      jsr     DO_COLON
@@ -1885,7 +2017,7 @@ BUILD:          jsr     DO_COLON
                 dw      COMMA
                 dw      EXIT
 
-; CREATE ( -- ) [TODO]
+; CREATE ( -- )
 ;
 ; Skip leading space delimiters. Parse name delimited by a space. Create a
 ; definition for name with the execution semantics defined below. If the data-
@@ -2033,7 +2165,7 @@ QNUM_3:         dw      EXIT
 QUERY_SIGN:     jsr     DO_COLON
                 dw      OVER
                 dw      C_FETCH
-                dw      DO_LITERAL,'-'
+                dw      DO_LITERAL,','
                 dw      MINUS
                 dw      DUP
                 dw      ABS
@@ -2061,8 +2193,19 @@ TO_COUNTED:     jsr     DO_COLON
                 dw      CMOVE
                 dw      EXIT
 
-; >NUMBER ( ud adr u -- ud' adr' u' )
+; >NUMBER ( ud1 c-addr1 u1 -- ud2 c-addr2 u2 )
 ;
+; ud2 is the unsigned result of converting the characters within the string
+; specified by c-addr1 u1 into digits, using the number in BASE, and adding
+; each into ud1 after multiplying ud1 by the number in BASE. Conversion
+; continues left-to-right until a character that is not convertible, including
+; any “+” or “-”, is encountered or the string is entirely converted. c-addr2
+; is the location of the first unconverted character or the first character
+; past the end of the string if the string was entirely converted. u2 is the
+; number of unconverted characters in the string. An ambiguous condition exists
+; if ud2 overflows during the conversion.
+;
+; In this implementation its is defined as:
 ;
 ;   BEGIN
 ;   DUP WHILE
@@ -2111,6 +2254,8 @@ TO_NUM_3:       dw      EXIT
 ; maintained in an implementation-defined way.
 ;
 ; +n2 is the length of the string stored at c-addr.
+;
+; In this implementation it is defined as:
 ;
 ;   OVER + 1- OVER      -- sa ea a
 ;   BEGIN KEY           -- sa ea a c
@@ -2298,6 +2443,8 @@ INTERPRET_7:    dw      DROP
 ; otherwise also return minus-one (-1). For a given string, the values returned
 ; by FIND while compiling may differ from those returned while not compiling.
 ;
+; In this implementation it is defined as:
+;
 ;   LATEST @ BEGIN             -- a nfa
 ;       2DUP OVER C@ CHAR+     -- a nfa a nfa n+1
 ;       S=                     -- a nfa f
@@ -2343,7 +2490,6 @@ FIND3:          dw      EXIT
 
 ; IMMED? ( nfa -- f )
 
-;               HEADER  6,"IMMED?",NORMAL
 IMMED_QUERY:    jsr     DO_COLON
                 dw      ONE_MINUS
                 dw      C_FETCH
@@ -2351,7 +2497,6 @@ IMMED_QUERY:    jsr     DO_COLON
 
 ; NFA>CFA ( nfa -- cfa )
 
-;               HEADER  7,"NFA>CFA",NORMAL
 NFA_TO_CFA:     jsr     DO_COLON
                 dw      COUNT
                 dw      PLUS
@@ -2359,7 +2504,6 @@ NFA_TO_CFA:     jsr     DO_COLON
 
 ; NFA>LFA ( nfa -- lfa )
 
-;               HEADER  7,"NFA>LFA",NORMAL
 NFA_TO_LFA:     jsr     DO_COLON
                 dw      DO_LITERAL,3
                 dw      MINUS
@@ -2506,7 +2650,6 @@ SCAN_2:
                 jmp     DROP                    ; Drop the character
 
 ; SKIP ( c-addr n c == c-addr' n' )
-;
 
 SKIP:
 SKIP_1:         lda     <3                      ; Any data left to skip over?
@@ -2621,15 +2764,30 @@ WORD_1:         dw      R_FROM
 ; entire string consists of spaces, u2 is zero.
 
                 HEADER  9,"-TRAILING",NORMAL
-DASH_TRAILING:  jsr     DO_COLON
-; TODO
-                dw      EXIT
+DASH_TRAILING:
+                phy                             ; Save IP
+                ldy     <1                      ; Is u1 > 0?
+                beq     DASH_TRAIL_3            ; No
+                short_a
+                dey                             ; Convert to offset
+DASH_TRAIL_1:   lda     (3),y                   ; Space character at end?
+                cmp     #' '
+                bne     DASH_TRAIL_2            ; No
+                dey                             ; More characters to check?
+                bpl     DASH_TRAIL_1            ; Yes
+DASH_TRAIL_2:   long_a
+                iny                             ; Convert to length
+DASH_TRAIL_3:   sty     <1                      ; Update
+                ply                             ; Restore IP
+                CONTINUE                        ; Done
 
 ; /STRING ( c-addr1 u1 n -- c-addr2 u2 )
 ;
 ; Adjust the character string at c-addr1 by n characters. The resulting
 ; character string, specified by c-addr2 u2, begins at c-addr1 plus n;
 ; characters and is u1 minus n characters long.
+;
+; In this implementation it is defined as:
 ;
 ;   ROT OVER + ROT ROT -
 
@@ -2721,6 +2879,7 @@ CMOVE_GT_2:
                 clc
                 adc     #6
                 tcd
+                ply
                 CONTINUE                        ; Done
 
 ; COMPARE ( c-addr1 u1 c-addr2 u2 -- n )
@@ -2737,9 +2896,38 @@ CMOVE_GT_2:
 ; c-addr2 u2 and one (1) otherwise.
 
                 HEADER  7,"COMPARE",NORMAL
-COMPARE:        jsr     DO_COLON
-; TODO
-                CONTINUE
+COMPARE:
+                lda     <1                      ; Both string lengths zero?
+                ora     <5
+                beq     COMPARE_X               ; Yes, must be equal
+
+                lda     <1                      ; Second string length zero?
+                beq     COMPARE_P               ; Yes, must be shorter
+                lda     <5                      ; First string length zero?
+                beq     COMPARE_N               ; Yes, must be shorter
+                short_a
+                lda     (7)                     ; Compare next characters
+                cmp     (3)
+                long_a
+                bcc     COMPARE_N
+                bne     COMPARE_P
+
+                inc     <3                      ; Bump string pointers
+                inc     <7
+                dec     <1                      ; And reduce lengths
+                dec     <5
+                bra     COMPARE
+
+COMPARE_P:      lda     #1
+                bra     COMPARE_X
+COMPARE_N:      lda     #-1
+
+COMPARE_X:      sta     <7                      ; Save the result
+                tdc
+                clc
+                adc     #6
+                tcd
+                CONTINUE                        ; Done
 
 ; COUNT ( c-addr1 -- c-addr2 u )
 ;
@@ -2822,7 +3010,12 @@ PLUS_LOOP:      jsr     DO_COLON
                 dw      DO_LITERAL,DO_PLUS_LOOP
                 dw      COMMA
                 dw      COMMA
-                dw      EXIT
+                dw      QUERY_DUP
+                dw      QUERY_BRANCH,PLUS_LOOP_1
+                dw      HERE
+                dw      SWAP
+                dw      STORE
+PLUS_LOOP_1:    dw      EXIT
 
 DO_PLUS_LOOP:
                 ldx     <1                      ; Fetch increment
@@ -2882,6 +3075,34 @@ SEMICOLON:      jsr     DO_COLON
                 dw      COMMA
                 dw      LEFT_BRACKET
                 dw      EXIT
+
+; ?DO ( -- )
+
+                HEADER  3,"?DO",IMMEDIATE
+QUERY_DO:       jsr     DO_COLON
+                dw      DO_LITERAL,QUERY_DO_DO
+                dw      COMMA
+                dw      HERE
+                dw      ZERO
+                dw      COMMA
+                dw      HERE
+                dw      EXIT
+
+QUERY_DO_DO:
+                lda     <1                      ; Are the start and limit
+                eor     <3                      ; .. the same?
+                beq     QUERY_DO_DO_1
+                iny                             ; No, Skip over jump address
+                iny
+                jmp     DO_DO                   ; And start a normal loop
+
+QUERY_DO_DO_1:  tdc                             ; Drop the loop parameters
+                inc     a
+                inc     a
+                inc     a
+                inc     a
+                tcd
+                jmp     BRANCH                  ; And skip over loop
 
 ; 2CONSTANT ( x “<spaces>name” -- )
 ;
@@ -3004,6 +3225,7 @@ DO_CONSTANT:
 DO:             jsr     DO_COLON
                 dw      DO_LITERAL,DO_DO
                 dw      COMMA
+                dw      ZERO
                 dw      HERE
                 dw      EXIT
 
@@ -3102,7 +3324,12 @@ LOOP:           jsr     DO_COLON
                 dw      DO_LITERAL,DO_LOOP
                 dw      COMMA
                 dw      COMMA
-                dw      EXIT
+                dw      QUERY_DUP
+                dw      QUERY_BRANCH,LOOP_1
+                dw      HERE
+                dw      SWAP
+                dw      STORE
+LOOP_1:         dw      EXIT
 
 ; (LOOP)
 
@@ -3686,17 +3913,23 @@ DOT_WORD:       jsr     DO_COLON
 
                 HEADER  2,".S",NORMAL
                 jsr     DO_COLON
+		dw	DO_LITERAL,'{'
+		dw	EMIT
+		dw	SPACE
                 dw      AT_DP
                 dw      ONE_PLUS
                 dw      DO_LITERAL,DSTACK_END
                 dw      SWAP
-                dw      DO_DO
+                dw      QUERY_DO_DO,DOT_S_2
 DOT_S_1:        dw      I
                 dw      FETCH
                 dw      DOT_WORD
                 dw      DO_LITERAL,2
                 dw      DO_PLUS_LOOP
                 dw      DOT_S_1
+DOT_S_2:	dw	DO_LITERAL,'}'
+		dw	EMIT
+		dw	SPACE
                 dw      EXIT
 
 ; ? ( a-addr -- )
