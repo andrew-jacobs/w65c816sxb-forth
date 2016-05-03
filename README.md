@@ -49,7 +49,4 @@ I will continue to add documentation, more words and debug.
 
 ## Bugs
 
-- The interpreter does not correctly convert signed numbers. Until I have tracked
-  this down you have to enter expressions like '7 NEGATE' instead of -7.
-
 - The generation of new lines during command entry needs to be improved.
