@@ -677,7 +677,7 @@ TWO_OVER:
 ; the top of the stack.
 
                 HEADER  4,"2ROT",NORMAL
-TWO_ROT:        jsr     DO_COLON
+TWO_ROT:
                 lda     <11                     ; Save x1
                 pha
                 lda     <9                      ; Save x2
